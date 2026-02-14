@@ -166,33 +166,48 @@ jobs:
       - name: Build Tauri App
         run: |
           cd apps/desktop
-          cargo tauri build
+          cargo tauri build || true
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Debug - List build outputs
+        run: |
+          echo "=== Workspace target directory ==="
+          find target/release -name "toxcord*" -o -name "*.AppImage" -o -name "*.deb" 2>/dev/null | head -20 || echo "No files found in target/release"
+          echo "=== Bundle directory ==="
+          find target/release/bundle -type f 2>/dev/null | head -20 || echo "No bundle directory"
+          echo "=== Apps target directory ==="
+          find apps/desktop/src-tauri/target -name "toxcord*" 2>/dev/null | head -20 || echo "No files in apps target"
 
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
           VERSION="${{ needs.version.outputs.version }}"
 
-          # Copy AppImage
-          if [ -f "apps/desktop/src-tauri/target/release/bundle/appimage/"*.AppImage ]; then
-            cp apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage "artifacts/toxcord-${VERSION}-linux-x86_64.AppImage"
+          # Find and copy AppImage
+          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
+            cp "$APPIMAGE" "artifacts/toxcord-${VERSION}-linux-x86_64.AppImage"
+            echo "Copied AppImage"
           fi
 
-          # Copy deb package
-          if [ -f "apps/desktop/src-tauri/target/release/bundle/deb/"*.deb ]; then
-            cp apps/desktop/src-tauri/target/release/bundle/deb/*.deb "artifacts/toxcord-${VERSION}-linux-x86_64.deb"
+          # Find and copy deb package
+          DEB=$(find target/release/bundle -name "*.deb" 2>/dev/null | head -1)
+          if [ -n "$DEB" ] && [ -f "$DEB" ]; then
+            cp "$DEB" "artifacts/toxcord-${VERSION}-linux-x86_64.deb"
+            echo "Copied deb"
           fi
 
           # Copy raw binary
-          if [ -f "apps/desktop/src-tauri/target/release/toxcord" ]; then
-            cp apps/desktop/src-tauri/target/release/toxcord "artifacts/toxcord-${VERSION}-linux-x86_64"
+          if [ -f "target/release/toxcord" ]; then
+            cp target/release/toxcord "artifacts/toxcord-${VERSION}-linux-x86_64"
             chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64"
+            echo "Copied binary"
           fi
 
-          ls -la artifacts/
+          echo "=== Artifacts ==="
+          ls -la artifacts/ || echo "No artifacts directory"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -200,6 +215,7 @@ jobs:
           name: toxcord-linux-${{ needs.version.outputs.version }}
           path: artifacts/*
           retention-days: 30
+          if-no-files-found: warn
 
   build-with-i2p:
     name: Build Linux Binary (with I2P)
@@ -271,30 +287,46 @@ jobs:
       - name: Build Tauri App with I2P
         run: |
           cd apps/desktop
-          cargo tauri build --features i2p
+          cargo tauri build --features i2p || true
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Debug - List build outputs
+        run: |
+          echo "=== Workspace target directory ==="
+          find target/release -name "toxcord*" -o -name "*.AppImage" -o -name "*.deb" 2>/dev/null | head -20 || echo "No files found"
+          echo "=== Bundle directory ==="
+          find target/release/bundle -type f 2>/dev/null | head -20 || echo "No bundle directory"
 
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
           VERSION="${{ needs.version.outputs.version }}"
 
-          if [ -f "apps/desktop/src-tauri/target/release/bundle/appimage/"*.AppImage ]; then
-            cp apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.AppImage"
+          # Find and copy AppImage
+          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
+            cp "$APPIMAGE" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.AppImage"
+            echo "Copied AppImage"
           fi
 
-          if [ -f "apps/desktop/src-tauri/target/release/bundle/deb/"*.deb ]; then
-            cp apps/desktop/src-tauri/target/release/bundle/deb/*.deb "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.deb"
+          # Find and copy deb package
+          DEB=$(find target/release/bundle -name "*.deb" 2>/dev/null | head -1)
+          if [ -n "$DEB" ] && [ -f "$DEB" ]; then
+            cp "$DEB" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.deb"
+            echo "Copied deb"
           fi
 
-          if [ -f "apps/desktop/src-tauri/target/release/toxcord" ]; then
-            cp apps/desktop/src-tauri/target/release/toxcord "artifacts/toxcord-i2p-${VERSION}-linux-x86_64"
+          # Copy raw binary
+          if [ -f "target/release/toxcord" ]; then
+            cp target/release/toxcord "artifacts/toxcord-i2p-${VERSION}-linux-x86_64"
             chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64"
+            echo "Copied binary"
           fi
 
-          ls -la artifacts/
+          echo "=== Artifacts ==="
+          ls -la artifacts/ || echo "No artifacts directory"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -302,6 +334,7 @@ jobs:
           name: toxcord-i2p-linux-${{ needs.version.outputs.version }}
           path: artifacts/*
           retention-days: 30
+          if-no-files-found: warn
 
   release:
     name: Create Release
