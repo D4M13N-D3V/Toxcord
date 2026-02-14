@@ -222,12 +222,7 @@ jobs:
             patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
 
             # Create launcher script
-            cat > "artifacts/toxcord-${VERSION}-linux-x86_64-portable/run.sh" << 'LAUNCHER'
-#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
-exec "$SCRIPT_DIR/toxcord" "$@"
-LAUNCHER
+            printf '#!/bin/bash\nSCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"\nexec "$SCRIPT_DIR/toxcord" "$@"\n' > "artifacts/toxcord-${VERSION}-linux-x86_64-portable/run.sh"
             chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64-portable/run.sh"
 
             # Create tarball
@@ -373,12 +368,7 @@ LAUNCHER
             patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
 
             # Create launcher script
-            cat > "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/run.sh" << 'LAUNCHER'
-#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
-exec "$SCRIPT_DIR/toxcord" "$@"
-LAUNCHER
+            printf '#!/bin/bash\nSCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"\nexec "$SCRIPT_DIR/toxcord" "$@"\n' > "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/run.sh"
             chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/run.sh"
 
             # Create tarball
