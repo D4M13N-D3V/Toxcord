@@ -1,0 +1,12 @@
+[package]
+name = "toxcord-tox-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+links = "toxcore"
+
+[build-dependencies]
+bindgen = "0.71"
+cmake = "0.1"
+pkg-config = "0.3"

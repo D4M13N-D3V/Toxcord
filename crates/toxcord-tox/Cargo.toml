@@ -1,0 +1,11 @@
+[package]
+name = "toxcord-tox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+toxcord-tox-sys = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }

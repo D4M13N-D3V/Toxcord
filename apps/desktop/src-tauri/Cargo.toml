@@ -1,0 +1,42 @@
+[package]
+name = "toxcord"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "toxcord_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+toxcord-tox = { workspace = true }
+toxcord-tox-sys = { workspace = true }
+toxcord-protocol = { workspace = true }
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+chrono = { workspace = true }
+dirs = "6"
+rusqlite = { workspace = true }
+
+# Audio capture/playback
+cpal = "0.15"
+rubato = "0.15"  # Audio resampling
+
+# I2P support (optional)
+emissary-core = { version = "0.3", optional = true }
+emissary-util = { version = "0.3", optional = true, default-features = false, features = ["tokio"] }
+
+[features]
+default = []
+i2p = ["emissary-core", "emissary-util"]
