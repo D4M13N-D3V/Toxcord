@@ -177,12 +177,10 @@ jobs:
 
       - name: Debug - List build outputs
         run: |
-          echo "=== Workspace target directory ==="
-          find target/release -name "toxcord*" -o -name "*.AppImage" -o -name "*.deb" 2>/dev/null | head -20 || echo "No files found in target/release"
-          echo "=== Bundle directory ==="
-          find target/release/bundle -type f 2>/dev/null | head -20 || echo "No bundle directory"
-          echo "=== Apps target directory ==="
-          find apps/desktop/src-tauri/target -name "toxcord*" 2>/dev/null | head -20 || echo "No files in apps target"
+          echo "=== Bundle directory structure ==="
+          find target/release/bundle -type f 2>/dev/null || echo "No bundle directory"
+          echo "=== AppImage files ==="
+          find target -name "*.AppImage" 2>/dev/null || echo "No AppImage files found"
 
       - name: Prepare artifacts
         run: |
@@ -190,63 +188,15 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
 
           # Find and copy AppImage
+          echo "=== Searching for AppImage ==="
+          find target -name "*.AppImage" 2>/dev/null || echo "No AppImage found"
           APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
           if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
             cp "$APPIMAGE" "artifacts/toxcord-${VERSION}-linux-x86_64.AppImage"
-            echo "Copied AppImage"
-          fi
-
-          # Find and copy deb package
-          DEB=$(find target/release/bundle -name "*.deb" 2>/dev/null | head -1)
-          if [ -n "$DEB" ] && [ -f "$DEB" ]; then
-            cp "$DEB" "artifacts/toxcord-${VERSION}-linux-x86_64.deb"
-            echo "Copied deb"
-          fi
-
-          # Copy raw binary with bundled libraries
-          if [ -f "target/release/toxcord" ]; then
-            mkdir -p "artifacts/toxcord-${VERSION}-linux-x86_64-portable"
-            cp target/release/toxcord "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
-            chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
-
-            # Bundle required shared libraries
-            mkdir -p "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib"
-            echo "=== ldd output ==="
-            ldd "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
-            echo "=== Bundling libs ==="
-            for lib in libsodium libopus libvpx; do
-              LIB_PATH=$(ldd "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
-              echo "Looking for $lib: found '$LIB_PATH'"
-              if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
-                cp "$LIB_PATH" "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib/"
-                echo "Bundled $lib from $LIB_PATH"
-              else
-                # Try to find it manually
-                MANUAL_PATH=$(find /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
-                if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
-                  cp "$MANUAL_PATH" "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib/"
-                  echo "Bundled $lib from $MANUAL_PATH (manual)"
-                else
-                  echo "WARNING: Could not find $lib"
-                fi
-              fi
-            done
-            echo "=== Bundled libs ==="
-            ls -la "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib/"
-
-            # Set rpath to look for libs in ./lib
-            patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
-
-            # Create launcher script
-            printf '#!/bin/bash\nSCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"\nexec "$SCRIPT_DIR/toxcord" "$@"\n' > "artifacts/toxcord-${VERSION}-linux-x86_64-portable/run.sh"
-            chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64-portable/run.sh"
-
-            # Create tarball
-            cd artifacts
-            tar -czvf "toxcord-${VERSION}-linux-x86_64-portable.tar.gz" "toxcord-${VERSION}-linux-x86_64-portable"
-            rm -rf "toxcord-${VERSION}-linux-x86_64-portable"
-            cd ..
-            echo "Created portable tarball"
+            chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64.AppImage"
+            echo "Copied AppImage: $APPIMAGE"
+          else
+            echo "WARNING: No AppImage found in target/release/bundle"
           fi
 
           echo "=== Artifacts ==="
@@ -258,7 +208,7 @@ jobs:
           name: toxcord-linux-${{ needs.version.outputs.version }}
           path: artifacts/*
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
   build-with-i2p:
     name: Build Linux Binary (with I2P)
@@ -341,10 +291,10 @@ jobs:
 
       - name: Debug - List build outputs
         run: |
-          echo "=== Workspace target directory ==="
-          find target/release -name "toxcord*" -o -name "*.AppImage" -o -name "*.deb" 2>/dev/null | head -20 || echo "No files found"
-          echo "=== Bundle directory ==="
-          find target/release/bundle -type f 2>/dev/null | head -20 || echo "No bundle directory"
+          echo "=== Bundle directory structure ==="
+          find target/release/bundle -type f 2>/dev/null || echo "No bundle directory"
+          echo "=== AppImage files ==="
+          find target -name "*.AppImage" 2>/dev/null || echo "No AppImage files found"
 
       - name: Prepare artifacts
         run: |
@@ -352,63 +302,15 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
 
           # Find and copy AppImage
+          echo "=== Searching for AppImage ==="
+          find target -name "*.AppImage" 2>/dev/null || echo "No AppImage found"
           APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
           if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
             cp "$APPIMAGE" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.AppImage"
-            echo "Copied AppImage"
-          fi
-
-          # Find and copy deb package
-          DEB=$(find target/release/bundle -name "*.deb" 2>/dev/null | head -1)
-          if [ -n "$DEB" ] && [ -f "$DEB" ]; then
-            cp "$DEB" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.deb"
-            echo "Copied deb"
-          fi
-
-          # Copy raw binary with bundled libraries
-          if [ -f "target/release/toxcord" ]; then
-            mkdir -p "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable"
-            cp target/release/toxcord "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
-            chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
-
-            # Bundle required shared libraries
-            mkdir -p "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib"
-            echo "=== ldd output ==="
-            ldd "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
-            echo "=== Bundling libs ==="
-            for lib in libsodium libopus libvpx; do
-              LIB_PATH=$(ldd "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
-              echo "Looking for $lib: found '$LIB_PATH'"
-              if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
-                cp "$LIB_PATH" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib/"
-                echo "Bundled $lib from $LIB_PATH"
-              else
-                # Try to find it manually
-                MANUAL_PATH=$(find /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
-                if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
-                  cp "$MANUAL_PATH" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib/"
-                  echo "Bundled $lib from $MANUAL_PATH (manual)"
-                else
-                  echo "WARNING: Could not find $lib"
-                fi
-              fi
-            done
-            echo "=== Bundled libs ==="
-            ls -la "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib/"
-
-            # Set rpath to look for libs in ./lib
-            patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
-
-            # Create launcher script
-            printf '#!/bin/bash\nSCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"\nexec "$SCRIPT_DIR/toxcord" "$@"\n' > "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/run.sh"
-            chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/run.sh"
-
-            # Create tarball
-            cd artifacts
-            tar -czvf "toxcord-i2p-${VERSION}-linux-x86_64-portable.tar.gz" "toxcord-i2p-${VERSION}-linux-x86_64-portable"
-            rm -rf "toxcord-i2p-${VERSION}-linux-x86_64-portable"
-            cd ..
-            echo "Created portable tarball"
+            chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.AppImage"
+            echo "Copied AppImage: $APPIMAGE"
+          else
+            echo "WARNING: No AppImage found in target/release/bundle"
           fi
 
           echo "=== Artifacts ==="
@@ -420,7 +322,7 @@ jobs:
           name: toxcord-i2p-linux-${{ needs.version.outputs.version }}
           path: artifacts/*
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
   release:
     name: Create Release
