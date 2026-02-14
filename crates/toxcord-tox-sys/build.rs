@@ -29,10 +29,30 @@ fn main() {
     // c-toxcore v0.2.22 builds everything into a single libtoxcore
     println!("cargo:rustc-link-lib=static=toxcore");
 
-    // Link system dependencies
-    pkg_config::probe_library("libsodium").expect("libsodium not found");
-    pkg_config::probe_library("opus").expect("opus not found");
-    pkg_config::probe_library("vpx").expect("vpx not found");
+    // Link system dependencies - prefer static linking for portability
+    let static_link = env::var("TOXCORD_STATIC").is_ok()
+        || env::var("CARGO_CFG_TARGET_FEATURE").map(|f| f.contains("crt-static")).unwrap_or(false);
+
+    if static_link {
+        // Static linking for portable binaries
+        pkg_config::Config::new()
+            .statik(true)
+            .probe("libsodium")
+            .expect("libsodium not found (static)");
+        pkg_config::Config::new()
+            .statik(true)
+            .probe("opus")
+            .expect("opus not found (static)");
+        pkg_config::Config::new()
+            .statik(true)
+            .probe("vpx")
+            .expect("vpx not found (static)");
+    } else {
+        // Dynamic linking (default)
+        pkg_config::probe_library("libsodium").expect("libsodium not found");
+        pkg_config::probe_library("opus").expect("opus not found");
+        pkg_config::probe_library("vpx").expect("vpx not found");
+    }
 
     // pthreads
     println!("cargo:rustc-link-lib=pthread");

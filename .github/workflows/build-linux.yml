@@ -116,6 +116,9 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Set static linking
+        run: echo "TOXCORD_STATIC=1" >> $GITHUB_ENV
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -245,6 +248,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Set static linking
+        run: echo "TOXCORD_STATIC=1" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
