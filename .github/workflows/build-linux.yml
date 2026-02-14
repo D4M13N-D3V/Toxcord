@@ -202,11 +202,40 @@ jobs:
             echo "Copied deb"
           fi
 
-          # Copy raw binary
+          # Copy raw binary with bundled libraries
           if [ -f "target/release/toxcord" ]; then
-            cp target/release/toxcord "artifacts/toxcord-${VERSION}-linux-x86_64"
-            chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64"
-            echo "Copied binary"
+            mkdir -p "artifacts/toxcord-${VERSION}-linux-x86_64-portable"
+            cp target/release/toxcord "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
+            chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
+
+            # Bundle required shared libraries
+            mkdir -p "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib"
+            for lib in libsodium libopus libvpx; do
+              LIB_PATH=$(ldd "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord" | grep "$lib" | awk '{print $3}')
+              if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
+                cp "$LIB_PATH" "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib/"
+                echo "Bundled $lib"
+              fi
+            done
+
+            # Set rpath to look for libs in ./lib
+            patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
+
+            # Create launcher script
+            cat > "artifacts/toxcord-${VERSION}-linux-x86_64-portable/run.sh" << 'LAUNCHER'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
+exec "$SCRIPT_DIR/toxcord" "$@"
+LAUNCHER
+            chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64-portable/run.sh"
+
+            # Create tarball
+            cd artifacts
+            tar -czvf "toxcord-${VERSION}-linux-x86_64-portable.tar.gz" "toxcord-${VERSION}-linux-x86_64-portable"
+            rm -rf "toxcord-${VERSION}-linux-x86_64-portable"
+            cd ..
+            echo "Created portable tarball"
           fi
 
           echo "=== Artifacts ==="
@@ -324,11 +353,40 @@ jobs:
             echo "Copied deb"
           fi
 
-          # Copy raw binary
+          # Copy raw binary with bundled libraries
           if [ -f "target/release/toxcord" ]; then
-            cp target/release/toxcord "artifacts/toxcord-i2p-${VERSION}-linux-x86_64"
-            chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64"
-            echo "Copied binary"
+            mkdir -p "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable"
+            cp target/release/toxcord "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
+            chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
+
+            # Bundle required shared libraries
+            mkdir -p "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib"
+            for lib in libsodium libopus libvpx; do
+              LIB_PATH=$(ldd "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord" | grep "$lib" | awk '{print $3}')
+              if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
+                cp "$LIB_PATH" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib/"
+                echo "Bundled $lib"
+              fi
+            done
+
+            # Set rpath to look for libs in ./lib
+            patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
+
+            # Create launcher script
+            cat > "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/run.sh" << 'LAUNCHER'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
+exec "$SCRIPT_DIR/toxcord" "$@"
+LAUNCHER
+            chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/run.sh"
+
+            # Create tarball
+            cd artifacts
+            tar -czvf "toxcord-i2p-${VERSION}-linux-x86_64-portable.tar.gz" "toxcord-i2p-${VERSION}-linux-x86_64-portable"
+            rm -rf "toxcord-i2p-${VERSION}-linux-x86_64-portable"
+            cd ..
+            echo "Created portable tarball"
           fi
 
           echo "=== Artifacts ==="
