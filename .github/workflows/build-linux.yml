@@ -210,13 +210,28 @@ jobs:
 
             # Bundle required shared libraries
             mkdir -p "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib"
+            echo "=== ldd output ==="
+            ldd "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
+            echo "=== Bundling libs ==="
             for lib in libsodium libopus libvpx; do
-              LIB_PATH=$(ldd "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord" | grep "$lib" | awk '{print $3}')
+              LIB_PATH=$(ldd "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
+              echo "Looking for $lib: found '$LIB_PATH'"
               if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
                 cp "$LIB_PATH" "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib/"
-                echo "Bundled $lib"
+                echo "Bundled $lib from $LIB_PATH"
+              else
+                # Try to find it manually
+                MANUAL_PATH=$(find /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
+                if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
+                  cp "$MANUAL_PATH" "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib/"
+                  echo "Bundled $lib from $MANUAL_PATH (manual)"
+                else
+                  echo "WARNING: Could not find $lib"
+                fi
               fi
             done
+            echo "=== Bundled libs ==="
+            ls -la "artifacts/toxcord-${VERSION}-linux-x86_64-portable/lib/"
 
             # Set rpath to look for libs in ./lib
             patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-${VERSION}-linux-x86_64-portable/toxcord"
@@ -356,13 +371,28 @@ jobs:
 
             # Bundle required shared libraries
             mkdir -p "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib"
+            echo "=== ldd output ==="
+            ldd "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
+            echo "=== Bundling libs ==="
             for lib in libsodium libopus libvpx; do
-              LIB_PATH=$(ldd "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord" | grep "$lib" | awk '{print $3}')
+              LIB_PATH=$(ldd "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
+              echo "Looking for $lib: found '$LIB_PATH'"
               if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
                 cp "$LIB_PATH" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib/"
-                echo "Bundled $lib"
+                echo "Bundled $lib from $LIB_PATH"
+              else
+                # Try to find it manually
+                MANUAL_PATH=$(find /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
+                if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
+                  cp "$MANUAL_PATH" "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib/"
+                  echo "Bundled $lib from $MANUAL_PATH (manual)"
+                else
+                  echo "WARNING: Could not find $lib"
+                fi
               fi
             done
+            echo "=== Bundled libs ==="
+            ls -la "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/lib/"
 
             # Set rpath to look for libs in ./lib
             patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-i2p-${VERSION}-linux-x86_64-portable/toxcord"
