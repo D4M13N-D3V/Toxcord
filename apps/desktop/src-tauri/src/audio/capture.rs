@@ -4,12 +4,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Device, Host, SampleFormat, SampleRate, Stream, StreamConfig};
-use rubato::{FftFixedInOut, Resampler};
+use cpal::{Device, Host, SampleFormat, Stream, StreamConfig};
+use rubato::{SincFixedOut, SincInterpolationParameters, SincInterpolationType, Resampler, WindowFunction};
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
-use super::{AudioDevice, AudioError, AudioResult, TOXAV_CHANNELS, TOXAV_SAMPLE_RATE, TOXAV_SAMPLES_PER_FRAME};
+use super::{AudioDevice, AudioError, AudioResult, TOXAV_SAMPLE_RATE, TOXAV_SAMPLES_PER_FRAME};
 
 /// Audio capture from microphone.
 /// Captures audio and resamples to ToxAV format (48kHz mono).
@@ -144,19 +144,33 @@ impl AudioCapture {
     fn create_resampler(
         input_rate: u32,
         _channels: usize,
-    ) -> AudioResult<FftFixedInOut<f32>> {
+    ) -> AudioResult<SincFixedOut<f32>> {
         // Create resampler from input rate to 48kHz
-        let resampler = FftFixedInOut::<f32>::new(
-            input_rate as usize,
-            TOXAV_SAMPLE_RATE as usize,
-            1024, // chunk size
-            1,    // mono output
+        let params = SincInterpolationParameters {
+            sinc_len: 256,
+            f_cutoff: 0.95,
+            interpolation: SincInterpolationType::Linear,
+            oversampling_factor: 256,
+            window: WindowFunction::BlackmanHarris2,
+        };
+
+        // Calculate the resampling ratio (output_rate / input_rate)
+        let resample_ratio = TOXAV_SAMPLE_RATE as f64 / input_rate as f64;
+
+        // SincFixedOut produces a fixed number of output samples (TOXAV_SAMPLES_PER_FRAME = 960)
+        // This ensures ToxAV always gets exactly 960 samples per frame
+        let resampler = SincFixedOut::<f32>::new(
+            resample_ratio,
+            2.0,  // max relative ratio
+            params,
+            TOXAV_SAMPLES_PER_FRAME,  // output chunk size - exactly 960 samples
+            1,    // mono
         )
         .map_err(|e| AudioError::Resample(format!("Failed to create resampler: {e}")))?;
 
         debug!(
-            "Created resampler: {} Hz -> {} Hz",
-            input_rate, TOXAV_SAMPLE_RATE
+            "Created resampler: {} Hz -> {} Hz (ratio: {:.4}), output_frames={}",
+            input_rate, TOXAV_SAMPLE_RATE, resample_ratio, TOXAV_SAMPLES_PER_FRAME
         );
         Ok(resampler)
     }
@@ -167,7 +181,7 @@ impl AudioCapture {
         frame_tx: mpsc::UnboundedSender<Vec<i16>>,
         running: Arc<AtomicBool>,
         input_channels: usize,
-        resampler: &mut Option<FftFixedInOut<f32>>,
+        resampler: &mut Option<SincFixedOut<f32>>,
         sample_buffer: &mut Vec<f32>,
         target_samples: usize,
     ) -> AudioResult<Stream>
@@ -192,9 +206,25 @@ impl AudioCapture {
                         buffer.push(f);
                     }
 
-                    // Process complete frames
-                    while buffer.len() >= target_samples {
-                        let frame_data: Vec<f32> = buffer.drain(..target_samples).collect();
+                    // Process frames
+                    loop {
+                        // Determine how many mono input samples we need
+                        let needed_mono_samples = if let Some(ref r) = resamp {
+                            // SincFixedOut tells us how many input frames it needs
+                            r.input_frames_next()
+                        } else {
+                            // No resampling - use target directly
+                            target_samples / input_channels
+                        };
+
+                        // Calculate how many interleaved samples we need in buffer
+                        let needed_buffer_samples = needed_mono_samples * input_channels;
+
+                        if buffer.len() < needed_buffer_samples {
+                            break; // Not enough samples yet
+                        }
+
+                        let frame_data: Vec<f32> = buffer.drain(..needed_buffer_samples).collect();
 
                         // Mix down to mono if stereo
                         let mono: Vec<f32> = if input_channels > 1 {
@@ -225,7 +255,8 @@ impl AudioCapture {
                             .map(|&s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
                             .collect();
 
-                        // Send frame
+                        // Send frame (should be exactly 960 samples)
+                        trace!("Captured audio frame: {} samples", pcm.len());
                         if frame_tx.send(pcm).is_err() {
                             // Receiver dropped, stop capturing
                             return;

@@ -7,10 +7,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::Emitter;
-use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use toxcord_tox::{CallStateFlags, ToxAvEventHandler};
+
+use crate::audio::AudioMixer;
+
 
 /// Call state for a single call
 #[derive(Debug, Clone, serde::Serialize)]
@@ -127,6 +129,7 @@ impl AvManager {
     /// Update call state based on ToxAV callback
     pub fn update_call_state(&mut self, friend_number: u32, state: CallStateFlags) {
         if let Some(call) = self.calls.get_mut(&friend_number) {
+            let old_state = call.state;
             if state.error || state.finished {
                 call.state = if state.error {
                     CallStatus::Error
@@ -137,12 +140,16 @@ impl AvManager {
                 if call.state != CallStatus::InProgress {
                     call.state = CallStatus::InProgress;
                     call.started_at = Some(chrono::Utc::now().to_rfc3339());
-                    info!("Call with friend {} is now in progress", friend_number);
+                    info!("Call with friend {} transitioned from {:?} to InProgress", friend_number, old_state);
                 }
             }
 
             call.has_audio = state.has_audio();
             call.has_video = state.has_video();
+            debug!("Call state for friend {} updated: {:?} -> {:?}, has_audio={}, has_video={}",
+                   friend_number, old_state, call.state, call.has_audio, call.has_video);
+        } else {
+            warn!("update_call_state called for friend {} but no call exists", friend_number);
         }
     }
 
@@ -199,16 +206,24 @@ impl AvManager {
 }
 
 /// ToxAV event handler that forwards events to the frontend via Tauri
+/// and pushes received audio to the mixer for playback
 pub struct TauriAvEventHandler {
     app_handle: tauri::AppHandle,
-    av_manager: Arc<Mutex<AvManager>>,
+    av_manager: Arc<std::sync::Mutex<AvManager>>,
+    /// Mixer for combining audio from multiple sources
+    mixer: Arc<std::sync::Mutex<AudioMixer>>,
 }
 
 impl TauriAvEventHandler {
-    pub fn new(app_handle: tauri::AppHandle, av_manager: Arc<Mutex<AvManager>>) -> Self {
+    pub fn new(
+        app_handle: tauri::AppHandle,
+        av_manager: Arc<std::sync::Mutex<AvManager>>,
+        mixer: Arc<std::sync::Mutex<AudioMixer>>,
+    ) -> Self {
         Self {
             app_handle,
             av_manager,
+            mixer,
         }
     }
 
@@ -224,8 +239,7 @@ impl ToxAvEventHandler for TauriAvEventHandler {
         info!("Incoming call from friend {}", friend_number);
 
         // Update manager state synchronously using blocking lock
-        // This is called from the tox thread which doesn't have a tokio runtime
-        if let Ok(mut mgr) = self.av_manager.try_lock() {
+        if let Ok(mut mgr) = self.av_manager.lock() {
             mgr.handle_incoming_call(friend_number, audio_enabled, video_enabled);
         }
 
@@ -237,7 +251,8 @@ impl ToxAvEventHandler for TauriAvEventHandler {
     }
 
     fn on_call_state(&self, friend_number: u32, state: CallStateFlags) {
-        debug!("Call state change for friend {}: {:?}", friend_number, state);
+        info!("Call state change for friend {}: {:?} (error={}, finished={}, is_active={})",
+              friend_number, state, state.error, state.finished, state.is_active());
 
         let state_str = if state.error {
             "error"
@@ -250,7 +265,7 @@ impl ToxAvEventHandler for TauriAvEventHandler {
         };
 
         // Update manager state
-        if let Ok(mut mgr) = self.av_manager.try_lock() {
+        if let Ok(mut mgr) = self.av_manager.lock() {
             mgr.update_call_state(friend_number, state);
         }
 
@@ -263,26 +278,40 @@ impl ToxAvEventHandler for TauriAvEventHandler {
             accepting_video: state.accepting_video,
         });
 
-        // If call ended, emit end event
+        // If call ended, emit end event and clean up mixer
         if state.finished || state.error {
             let reason = if state.error { "error" } else { "hangup" };
             self.emit(ToxAvEvent::CallEnded {
                 friend_number,
                 reason: reason.to_string(),
             });
+
+            // Remove this friend's audio source from the mixer
+            if let Ok(mut mixer) = self.mixer.lock() {
+                mixer.remove_source(friend_number);
+            }
         }
     }
 
     fn on_audio_receive_frame(
         &self,
-        _friend_number: u32,
-        _pcm: &[i16],
-        _sample_count: usize,
-        _channels: u8,
-        _sampling_rate: u32,
+        friend_number: u32,
+        pcm: &[i16],
+        sample_count: usize,
+        channels: u8,
+        sampling_rate: u32,
     ) {
-        // Audio frames are handled directly on the tox thread via the mixer
-        // This callback is still useful for audio level monitoring in the future
+        // Log received audio for debugging
+        debug!(
+            "Received audio frame from friend {}: {} samples, {} channels, {} Hz, pcm_len={}",
+            friend_number, sample_count, channels, sampling_rate, pcm.len()
+        );
+
+        // Push received audio to the mixer for playback
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.push_frame(friend_number, pcm.to_vec());
+            debug!("Pushed {} samples to mixer for friend {}", pcm.len(), friend_number);
+        }
     }
 
     fn on_video_receive_frame(

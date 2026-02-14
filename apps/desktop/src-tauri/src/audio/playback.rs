@@ -1,11 +1,10 @@
 //! Audio playback to speakers using cpal.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Host, SampleFormat, Stream, StreamConfig};
-use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
 use super::mixer::AudioMixer;

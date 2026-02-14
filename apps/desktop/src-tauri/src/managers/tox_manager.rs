@@ -10,7 +10,8 @@ use toxcord_tox::tox::{decrypt_savedata, default_bootstrap_nodes, encrypt_saveda
 use toxcord_tox::types::*;
 use toxcord_tox::{AudioFrame, ProxyType, ToxAvEventHandler, ToxAvInstance, ToxInstance, ToxOptionsBuilder};
 
-use super::av_manager::{AvManager, CallState, TauriAvEventHandler};
+use super::av_manager::{AvManager, CallState, CallStatus, TauriAvEventHandler};
+use crate::audio::{AudioCapture, AudioMixer, AudioPlayback};
 
 /// Proxy configuration for Tox connections
 #[derive(Clone, Debug, Default)]
@@ -924,12 +925,16 @@ fn run_tox_thread(
         }
     };
 
+    // Create shared audio mixer for combining received audio from multiple peers
+    let mixer = Arc::new(std::sync::Mutex::new(AudioMixer::default()));
+
     // Create AV manager and event handler for ToxAV callbacks
-    let av_manager = Arc::new(tokio::sync::Mutex::new(AvManager::new()));
+    let av_manager = Arc::new(std::sync::Mutex::new(AvManager::new()));
     let av_handler: Option<*mut Box<dyn ToxAvEventHandler>> = if toxav.is_some() {
         let handler: Box<dyn ToxAvEventHandler> = Box::new(TauriAvEventHandler::new(
             app_handle.clone(),
             av_manager.clone(),
+            mixer.clone(),
         ));
         let handler_ptr = Box::into_raw(Box::new(handler));
         // Register ToxAV callbacks with our handler
@@ -940,6 +945,14 @@ fn run_tox_thread(
     } else {
         None
     };
+
+    // Audio capture channel - capture thread sends frames here
+    let (audio_tx, mut audio_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<i16>>();
+
+    // Audio capture and playback (managed on this thread, started when calls are active)
+    let mut audio_capture: Option<AudioCapture> = None;
+    let mut audio_playback: Option<AudioPlayback> = None;
+    let mut audio_active = false;
 
     // Bootstrap to DHT nodes
     for node in default_bootstrap_nodes() {
@@ -1256,8 +1269,17 @@ fn run_tox_thread(
                     reply,
                 } => {
                     let result = if let Some(ref av) = toxav {
-                        av.call(friend_number, audio_bit_rate, video_bit_rate)
-                            .map_err(|e| e.to_string())
+                        match av.call(friend_number, audio_bit_rate, video_bit_rate) {
+                            Ok(()) => {
+                                // Register the call with the manager
+                                let with_video = video_bit_rate > 0;
+                                if let Ok(mut mgr) = av_manager.lock() {
+                                    mgr.start_call(friend_number, with_video);
+                                }
+                                Ok(())
+                            }
+                            Err(e) => Err(e.to_string()),
+                        }
                     } else {
                         Err("ToxAV not available".to_string())
                     };
@@ -1270,8 +1292,43 @@ fn run_tox_thread(
                     reply,
                 } => {
                     let result = if let Some(ref av) = toxav {
-                        av.answer(friend_number, audio_bit_rate, video_bit_rate)
-                            .map_err(|e| e.to_string())
+                        match av.answer(friend_number, audio_bit_rate, video_bit_rate) {
+                            Ok(()) => {
+                                info!("Successfully answered call from friend {}", friend_number);
+                                // Manually transition call to InProgress since ToxAV callback may not fire
+                                if let Ok(mut mgr) = av_manager.lock() {
+                                    // Create a synthetic "active" state to transition the call
+                                    let active_state = toxcord_tox::CallStateFlags {
+                                        error: false,
+                                        finished: false,
+                                        sending_audio: true,
+                                        sending_video: video_bit_rate > 0,
+                                        accepting_audio: true,
+                                        accepting_video: video_bit_rate > 0,
+                                    };
+                                    mgr.update_call_state(friend_number, active_state);
+                                    info!("Transitioned call with friend {} to InProgress after answer", friend_number);
+                                }
+                                // Emit state change to frontend
+                                use crate::managers::av_manager::ToxAvEvent;
+                                let event = ToxAvEvent::CallStateChange {
+                                    friend_number,
+                                    state: "in_progress".to_string(),
+                                    sending_audio: true,
+                                    sending_video: video_bit_rate > 0,
+                                    accepting_audio: true,
+                                    accepting_video: video_bit_rate > 0,
+                                };
+                                if let Err(e) = app_handle.emit("toxav://event", &event) {
+                                    error!("Failed to emit call state change: {e}");
+                                }
+                                Ok(())
+                            }
+                            Err(e) => {
+                                error!("Failed to answer call from friend {}: {}", friend_number, e);
+                                Err(e.to_string())
+                            }
+                        }
                     } else {
                         Err("ToxAV not available".to_string())
                     };
@@ -1279,7 +1336,20 @@ fn run_tox_thread(
                 }
                 ToxCommand::AvHangup { friend_number, reply } => {
                     let result = if let Some(ref av) = toxav {
-                        av.hangup(friend_number).map_err(|e| e.to_string())
+                        match av.hangup(friend_number) {
+                            Ok(()) => {
+                                // Clean up the call in the manager
+                                if let Ok(mut mgr) = av_manager.lock() {
+                                    mgr.end_call(friend_number);
+                                }
+                                // Clean up mixer source
+                                if let Ok(mut m) = mixer.lock() {
+                                    m.remove_source(friend_number);
+                                }
+                                Ok(())
+                            }
+                            Err(e) => Err(e.to_string()),
+                        }
                     } else {
                         Err("ToxAV not available".to_string())
                     };
@@ -1338,8 +1408,7 @@ fn run_tox_thread(
                 }
                 ToxCommand::AvGetCallState { friend_number, reply } => {
                     // Get call state from the AV manager using blocking access
-                    // Note: This is safe because we're on a dedicated thread
-                    let state = if let Ok(mgr) = av_manager.try_lock() {
+                    let state = if let Ok(mgr) = av_manager.lock() {
                         mgr.get_call(friend_number).cloned()
                     } else {
                         None
@@ -1373,6 +1442,103 @@ fn run_tox_thread(
         // Run toxav_iterate
         if let Some(ref av) = toxav {
             av.iterate();
+        }
+
+        // Check if we have any active calls (in_progress state) to manage audio
+        let (has_active_call, call_count) = if let Ok(mgr) = av_manager.lock() {
+            let calls = mgr.get_all_calls();
+            let count = calls.len();
+            let active = calls.iter().any(|c| c.state == CallStatus::InProgress);
+            // Log when there are calls but audio hasn't started yet
+            if count > 0 && !audio_active {
+                for call in calls {
+                    debug!("Call state check: friend={} state={:?} audio_active={}",
+                           call.friend_number, call.state, audio_active);
+                }
+            }
+            (active, count)
+        } else {
+            (false, 0)
+        };
+
+        // Start audio capture/playback when a call becomes active
+        if has_active_call && !audio_active {
+            info!("Starting audio for active call");
+
+            // Start audio capture (microphone)
+            match AudioCapture::start(audio_tx.clone()) {
+                Ok(capture) => {
+                    audio_capture = Some(capture);
+                    info!("Audio capture started");
+                }
+                Err(e) => {
+                    error!("Failed to start audio capture: {e}");
+                }
+            }
+
+            // Start audio playback (speakers) with the shared mixer
+            match AudioPlayback::start(mixer.clone()) {
+                Ok(playback) => {
+                    audio_playback = Some(playback);
+                    info!("Audio playback started");
+                }
+                Err(e) => {
+                    error!("Failed to start audio playback: {e}");
+                }
+            }
+
+            audio_active = true;
+        }
+
+        // Stop audio when no calls are active
+        if !has_active_call && audio_active {
+            info!("Stopping audio - no active calls");
+            audio_capture = None;
+            audio_playback = None;
+            if let Ok(mut m) = mixer.lock() {
+                m.clear();
+            }
+            audio_active = false;
+        }
+
+        // Send captured audio frames to all active calls
+        if let Some(ref av) = toxav {
+            let mut frame_count = 0;
+            while let Ok(pcm) = audio_rx.try_recv() {
+                frame_count += 1;
+                // Get list of friends we're in active calls with
+                let active_friends: Vec<u32> = if let Ok(mgr) = av_manager.lock() {
+                    mgr.get_all_calls()
+                        .iter()
+                        .filter(|c| c.state == CallStatus::InProgress && !c.is_audio_muted)
+                        .map(|c| c.friend_number)
+                        .collect()
+                } else {
+                    vec![]
+                };
+
+                if active_friends.is_empty() && frame_count == 1 {
+                    debug!("Captured audio but no active friends to send to");
+                }
+
+                // Send audio to each active call
+                for friend_number in active_friends {
+                    let frame = AudioFrame {
+                        pcm: pcm.clone(),
+                        sample_count: pcm.len(),
+                        channels: 1,
+                        sampling_rate: 48000,
+                    };
+                    match av.audio_send_frame(friend_number, &frame) {
+                        Ok(()) => {
+                            debug!("Sent {} samples to friend {}", pcm.len(), friend_number);
+                        }
+                        Err(e) => {
+                            debug!("Failed to send audio frame to friend {}: {e}", friend_number);
+                        }
+                    }
+                }
+            }
         }
 
         // Process offline queue flush requests

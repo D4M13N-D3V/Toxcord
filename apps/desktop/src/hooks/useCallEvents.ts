@@ -8,10 +8,33 @@ export function useCallEvents() {
   const updateCallState = useCallStore((s) => s.updateCallState);
   const endCall = useCallStore((s) => s.endCall);
   const updateDuration = useCallStore((s) => s.updateDuration);
+  const activeCallStatus = useCallStore((s) => s.activeCall?.status);
 
   // Timer for updating call duration
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Manage duration timer based on call status
+  useEffect(() => {
+    if (activeCallStatus === "in_progress" && !durationTimerRef.current) {
+      // Start timer when call becomes active
+      durationTimerRef.current = setInterval(() => {
+        updateDuration();
+      }, 1000);
+    } else if (activeCallStatus !== "in_progress" && durationTimerRef.current) {
+      // Stop timer when call ends or not in progress
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
+
+    return () => {
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+    };
+  }, [activeCallStatus, updateDuration]);
+
+  // Handle ToxAV events
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
@@ -41,23 +64,11 @@ export function useCallEvents() {
             acceptingAudio: event.data.accepting_audio,
             acceptingVideo: event.data.accepting_video,
           });
-
-          // Start duration timer when call becomes active
-          if (status === "in_progress" && !durationTimerRef.current) {
-            durationTimerRef.current = setInterval(() => {
-              updateDuration();
-            }, 1000);
-          }
           break;
         }
 
         case "CallEnded":
           endCall(event.data.friend_number, event.data.reason);
-          // Clear duration timer
-          if (durationTimerRef.current) {
-            clearInterval(durationTimerRef.current);
-            durationTimerRef.current = null;
-          }
           break;
 
         case "AudioLevelUpdate":
@@ -70,9 +81,6 @@ export function useCallEvents() {
 
     return () => {
       unlisten?.();
-      if (durationTimerRef.current) {
-        clearInterval(durationTimerRef.current);
-      }
     };
-  }, [setIncomingCall, updateCallState, endCall, updateDuration]);
+  }, [setIncomingCall, updateCallState, endCall]);
 }

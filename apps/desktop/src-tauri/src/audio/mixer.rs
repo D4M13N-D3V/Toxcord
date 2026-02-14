@@ -121,6 +121,17 @@ impl AudioMixer {
             return vec![0i16; sample_count];
         }
 
+        // Log available samples for debugging
+        let total_available: usize = self.sources.values().map(|s| s.available_samples()).sum();
+        if total_available > 0 {
+            debug!(
+                "Mixer: {} sources, {} total samples available, requesting {}",
+                self.sources.len(),
+                total_available,
+                sample_count
+            );
+        }
+
         // Collect samples from all sources
         let source_count = self.sources.len();
         let mut all_samples: Vec<Vec<i16>> = Vec::with_capacity(source_count);
