@@ -134,13 +134,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Setup Rust GNU target
-        run: |
-          rustup target add x86_64-pc-windows-gnu
-
       - name: Install Tauri CLI
         shell: msys2 {0}
-        run: cargo install tauri-cli --target x86_64-pc-windows-gnu
+        run: cargo install tauri-cli
         continue-on-error: true
 
       - name: Update version in Cargo.toml
@@ -168,10 +164,7 @@ jobs:
           export CMAKE_CXX_COMPILER=/mingw64/bin/g++.exe
           export CMAKE_PREFIX_PATH="/mingw64"
           export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
-          export PKG_CONFIG_ALLOW_CROSS=1
-          export PKG_CONFIG_SYSROOT_DIR="/mingw64"
-          # Bindgen clang args for cross-compilation
-          export BINDGEN_EXTRA_CLANG_ARGS="--target=x86_64-pc-windows-gnu -I/mingw64/include -I/mingw64/x86_64-w64-mingw32/include"
+          # Use MSYS2's libclang for bindgen
           export LIBCLANG_PATH="/mingw64/lib"
           export SODIUM_LIB_DIR="/mingw64/lib"
           export SODIUM_INCLUDE_DIR="/mingw64/include"
@@ -185,8 +178,8 @@ jobs:
           export OPENSSL_LIB_DIR="/mingw64/lib"
           export OPENSSL_INCLUDE_DIR="/mingw64/include"
           cd apps/desktop
-          # Use GNU target to match MinGW libraries
-          cargo tauri build --target x86_64-pc-windows-gnu
+          # Build using MSYS2's native MinGW Rust toolchain
+          cargo tauri build
 
       - name: Debug - List build outputs
         shell: bash
@@ -216,11 +209,8 @@ jobs:
             echo "Copied NSIS installer"
           fi
 
-          # Copy raw binary (check both possible locations)
-          if [ -f "target/x86_64-pc-windows-gnu/release/toxcord.exe" ]; then
-            cp "target/x86_64-pc-windows-gnu/release/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
-            echo "Copied binary from GNU target"
-          elif [ -f "target/release/toxcord.exe" ]; then
+          # Copy raw binary
+          if [ -f "target/release/toxcord.exe" ]; then
             cp "target/release/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
             echo "Copied binary"
           fi
