@@ -105,8 +105,9 @@ jobs:
 
       - name: Install Rust
         run: |
+          export HOME=/root
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "/root/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install pnpm
         run: npm install -g pnpm
@@ -129,7 +130,7 @@ jobs:
 
       - name: Install Tauri CLI
         run: |
-          source $HOME/.cargo/env
+          source /root/.cargo/env
           cargo install tauri-cli || true
 
       - name: Update version in Cargo.toml
@@ -143,7 +144,7 @@ jobs:
 
       - name: Build Tauri App
         run: |
-          source $HOME/.cargo/env
+          source /root/.cargo/env
           cd apps/desktop
           cargo tauri build || true
         env:
