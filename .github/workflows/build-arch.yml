@@ -163,7 +163,9 @@ jobs:
           cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
 
           # Create AppImage using linuxdeploy with bundled plugin
+          # Disable strip since bundled strip is incompatible with newer Arch libraries
           export OUTPUT="toxcord-${VERSION}-arch-x86_64.AppImage"
+          export DISABLE_STRIP=1
           /tmp/linuxdeploy/AppRun --appdir AppDir --output appimage
 
           mkdir -p artifacts
@@ -272,7 +274,9 @@ jobs:
           cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
 
           # Create AppImage using linuxdeploy with bundled plugin
+          # Disable strip since bundled strip is incompatible with newer Arch libraries
           export OUTPUT="toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
+          export DISABLE_STRIP=1
           /tmp/linuxdeploy/AppRun --appdir AppDir --output appimage
 
           mkdir -p artifacts
