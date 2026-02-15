@@ -106,6 +106,7 @@ jobs:
             mingw-w64-x86_64-libvpx
             mingw-w64-x86_64-rust
             mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-clang
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -169,6 +170,9 @@ jobs:
           export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
           export PKG_CONFIG_ALLOW_CROSS=1
           export PKG_CONFIG_SYSROOT_DIR="/mingw64"
+          # Bindgen clang args for cross-compilation
+          export BINDGEN_EXTRA_CLANG_ARGS="--target=x86_64-pc-windows-gnu -I/mingw64/include -I/mingw64/x86_64-w64-mingw32/include"
+          export LIBCLANG_PATH="/mingw64/lib"
           export SODIUM_LIB_DIR="/mingw64/lib"
           export SODIUM_INCLUDE_DIR="/mingw64/include"
           export LIBSODIUM_INCLUDE_DIR="/mingw64/include"
