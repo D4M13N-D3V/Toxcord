@@ -99,7 +99,7 @@ jobs:
             libsodium-devel opus-devel libvpx-devel \
             gtk3-devel webkit2gtk4.1-devel \
             libappindicator-gtk3-devel librsvg2-devel \
-            alsa-lib-devel libv4l-devel kernel-headers clang-devel llvm-devel \
+            alsa-lib-devel libv4l-devel kernel-headers clang-devel llvm-devel openssl-devel \
             curl wget git patchelf \
             nodejs npm
 
