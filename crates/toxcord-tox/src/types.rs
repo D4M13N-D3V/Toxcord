@@ -126,10 +126,12 @@ pub struct GroupPeerInfo {
     pub status: UserStatus,
 }
 
-/// Bootstrap node
+/// Bootstrap node with optional TCP relay support
 #[derive(Debug, Clone)]
 pub struct BootstrapNode {
     pub address: String,
     pub port: u16,
     pub public_key: String,
+    /// TCP ports for relay fallback (empty if no TCP support)
+    pub tcp_ports: Vec<u16>,
 }

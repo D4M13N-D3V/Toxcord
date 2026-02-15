@@ -2,13 +2,16 @@
 //!
 //! This module provides:
 //! - Video capture from camera (via nokhwa)
+//! - Screen capture for screen sharing (via xcap)
 //! - RGB to YUV420 conversion for ToxAV
 //! - Frame transport to frontend
 
 pub mod capture;
 pub mod convert;
+pub mod screen;
 
 pub use capture::{VideoCapture, VideoCaptureError, VideoFrameData};
+pub use screen::{ScreenCapture, ScreenInfo};
 
 /// Default video configuration
 pub const DEFAULT_VIDEO_WIDTH: u32 = 640;

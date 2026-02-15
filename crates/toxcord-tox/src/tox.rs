@@ -302,6 +302,38 @@ impl ToxInstance {
         }
     }
 
+    /// Add a TCP relay node for NAT traversal fallback.
+    ///
+    /// TCP relays are essential for communication when direct UDP connection fails
+    /// (common behind symmetric NATs and strict firewalls). Call this in addition
+    /// to bootstrap() for nodes that support TCP.
+    pub fn add_tcp_relay(&self, address: &str, port: u16, public_key_hex: &str) -> ToxResult<()> {
+        let pk_bytes = hex_to_bytes(public_key_hex)
+            .ok_or_else(|| ToxError::Bootstrap("Invalid public key hex".into()))?;
+
+        let c_address =
+            CString::new(address).map_err(|e| ToxError::Bootstrap(format!("Invalid address: {e}")))?;
+
+        unsafe {
+            let mut err = Tox_Err_Bootstrap::default();
+            let ok = tox_add_tcp_relay(
+                self.tox,
+                c_address.as_ptr(),
+                port,
+                pk_bytes.as_ptr(),
+                &mut err,
+            );
+            if ok {
+                debug!("Added TCP relay {address}:{port}");
+                Ok(())
+            } else {
+                Err(ToxError::Bootstrap(format!(
+                    "tox_add_tcp_relay to {address}:{port} failed: {err:?}"
+                )))
+            }
+        }
+    }
+
     /// Run one iteration of the tox event loop
     pub fn iterate(&self) {
         unsafe {
@@ -596,32 +628,78 @@ fn hex_to_bytes(hex: &str) -> Option<Vec<u8>> {
 }
 
 /// Default bootstrap nodes from nodes.tox.chat
+/// Updated with active nodes that support both UDP bootstrap and TCP relay
 pub fn default_bootstrap_nodes() -> Vec<BootstrapNode> {
     vec![
-        BootstrapNode {
-            address: "tox.abilinski.com".into(),
-            port: 33445,
-            public_key: "10C00EB250C3233E343E2AEBA07115A5C28920E9C8D29492F6D00B29049EDC7E".into(),
-        },
-        BootstrapNode {
-            address: "198.98.51.198".into(),
-            port: 33445,
-            public_key: "1C5293AEF2114717547B39DA8EA6F1E331E5E358B35F9B6B5F19317911C5F976".into(),
-        },
-        BootstrapNode {
-            address: "tox2.abilinski.com".into(),
-            port: 33445,
-            public_key: "7A6098B590BDC73F9723FC59F82B3F9085A64D1B213AAF8E610FD351930D052D".into(),
-        },
-        BootstrapNode {
-            address: "46.101.197.175".into(),
-            port: 33445,
-            public_key: "CD133B521159541FB1D326DE9850F5E56A6C724B5B8E5EB5CD8D950408E95707".into(),
-        },
+        // Canada - highly reliable, multiple TCP ports
         BootstrapNode {
             address: "144.217.167.73".into(),
             port: 33445,
             public_key: "7E5668E0EE09E19F320AD47902419331FFEE147BB3606769CE1C39F3B267235F".into(),
+            tcp_ports: vec![33445, 3389],
+        },
+        // US - multiple TCP ports including common firewall-friendly ones
+        BootstrapNode {
+            address: "205.185.115.131".into(),
+            port: 53,
+            public_key: "3091C6BEB2A993F1AFA2A043EFFE3432A651D790B67E2DD37BFE6E7C5BCD3F6E".into(),
+            tcp_ports: vec![53, 443, 33445, 3389],
+        },
+        // Germany - mf-net.eu node
+        BootstrapNode {
+            address: "tox1.mf-net.eu".into(),
+            port: 33445,
+            public_key: "B3E5FA80DC8EBD1149AD2AB35ED8B85BD546DEDE261CA593234C619249419506".into(),
+            tcp_ports: vec![33445, 3389],
+        },
+        // Russia
+        BootstrapNode {
+            address: "188.225.9.167".into(),
+            port: 33445,
+            public_key: "1911341A83E02503AB1FD6561BD64AF3A9D6C3F12B5FBB656976B2E678644A67".into(),
+            tcp_ports: vec![33445, 3389],
+        },
+        // Singapore - AWS
+        BootstrapNode {
+            address: "3.0.24.15".into(),
+            port: 33445,
+            public_key: "E20ABCF38CDBFFD7D04B29C956B33682B5F5E7E628D6ACBE7E7C3C8D8B3D6F7D".into(),
+            tcp_ports: vec![33445],
+        },
+        // US - additional node
+        BootstrapNode {
+            address: "104.225.141.59".into(),
+            port: 43334,
+            public_key: "933BA20B2E258B4C0D475B6DECE90C7E827FE83F0DA0C2D4AE9D6EDE3D8FF6EA".into(),
+            tcp_ports: vec![33445, 3389],
+        },
+        // Singapore - Linode
+        BootstrapNode {
+            address: "139.162.110.188".into(),
+            port: 33445,
+            public_key: "F76A11284547163B190B5A2E4F66BACA9AA4381540E1609E99FF5B14C40C14D0".into(),
+            tcp_ports: vec![33445, 3389, 443],
+        },
+        // Germany - mf-net.eu secondary
+        BootstrapNode {
+            address: "tox2.mf-net.eu".into(),
+            port: 33445,
+            public_key: "70EA214FDE161E7432530605213F18F7427DC773E276B3E317A07A1F9B4A6F1E".into(),
+            tcp_ports: vec![33445, 3389],
+        },
+        // Canada - abilinski (original, but with TCP)
+        BootstrapNode {
+            address: "tox.abilinski.com".into(),
+            port: 33445,
+            public_key: "10C00EB250C3233E343E2AEBA07115A5C28920E9C8D29492F6D00B29049EDC7E".into(),
+            tcp_ports: vec![33445],
+        },
+        // Netherlands
+        BootstrapNode {
+            address: "tox.kurnevsky.net".into(),
+            port: 33445,
+            public_key: "82EF82BA33445A1F91A7DB27189ECFC0C013A96D5E4A5B3C8A3A39C4E4E9F94E".into(),
+            tcp_ports: vec![33445, 443],
         },
     ]
 }

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as api from "../api/calls";
-import type { CallStatus } from "../api/calls";
+import type { CallStatus, ScreenInfo } from "../api/calls";
 
 interface ActiveCall {
   friendNumber: number;
@@ -34,6 +34,12 @@ interface CallStoreState {
   isMuted: boolean;
   /** Whether speaker is deafened */
   isDeafened: boolean;
+  /** Whether screen sharing is active */
+  isScreenSharing: boolean;
+  /** Available screens for sharing */
+  availableScreens: ScreenInfo[];
+  /** Whether video is in fullscreen mode */
+  isFullscreen: boolean;
 
   /** Selected device IDs */
   selectedMicId: string | null;
@@ -48,6 +54,8 @@ interface CallStoreState {
   toggleMute: () => Promise<void>;
   toggleDeafen: () => void;
   toggleVideo: () => Promise<void>;
+  toggleScreenShare: () => Promise<void>;
+  toggleFullscreen: () => void;
 
   // Device selection
   setSelectedMic: (id: string) => Promise<void>;
@@ -72,6 +80,9 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
   isConnecting: false,
   isMuted: false,
   isDeafened: false,
+  isScreenSharing: false,
+  availableScreens: [],
+  isFullscreen: false,
   selectedMicId: null,
   selectedSpeakerId: null,
   selectedCameraId: null,
@@ -146,7 +157,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
 
     try {
       await api.hangupCall(activeCall.friendNumber);
-      set({ activeCall: null, isMuted: false, isDeafened: false });
+      set({ activeCall: null, isMuted: false, isDeafened: false, isScreenSharing: false, isFullscreen: false });
     } catch (e) {
       console.error("Failed to hangup:", e);
     }
@@ -218,6 +229,39 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     }
   },
 
+  toggleScreenShare: async () => {
+    const { activeCall, isScreenSharing } = get();
+    if (!activeCall) return;
+
+    try {
+      if (isScreenSharing) {
+        // Stop screen sharing
+        await api.stopScreenShare();
+        set({ isScreenSharing: false });
+        console.log("[CallStore] Screen sharing stopped");
+      } else {
+        // Start screen sharing - get screens and share primary
+        const screens = await api.listScreens();
+        console.log("[CallStore] Available screens:", screens);
+
+        const primary = screens.find((s) => s.is_primary) || screens[0];
+        if (primary) {
+          await api.startScreenShare(primary.id);
+          set({ isScreenSharing: true, availableScreens: screens });
+          console.log("[CallStore] Screen sharing started:", primary.name);
+        } else {
+          console.error("[CallStore] No screens available for sharing");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to toggle screen share:", e);
+    }
+  },
+
+  toggleFullscreen: () => {
+    set((s) => ({ isFullscreen: !s.isFullscreen }));
+  },
+
   setIncomingCall: (call) => {
     set({ incomingCall: call });
   },
@@ -244,7 +288,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
   endCall: (friendNumber, _reason) => {
     set((s) => {
       if (s.activeCall?.friendNumber === friendNumber) {
-        return { activeCall: null, isMuted: false, isDeafened: false };
+        return { activeCall: null, isMuted: false, isDeafened: false, isScreenSharing: false, isFullscreen: false };
       }
       if (s.incomingCall?.friendNumber === friendNumber) {
         return { incomingCall: null };

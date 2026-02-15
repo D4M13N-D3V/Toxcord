@@ -20,6 +20,10 @@ pub struct AppState {
     pub selected_speaker_index: Mutex<Option<u32>>,
     /// Selected video device index (None = default)
     pub selected_camera_index: Mutex<Option<u32>>,
+    /// Whether screen sharing is active (replaces camera)
+    pub is_screen_sharing: Mutex<bool>,
+    /// Selected screen ID for sharing (None = primary)
+    pub screen_share_id: Mutex<Option<u32>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,6 +43,8 @@ pub fn run() {
             selected_mic_index: Mutex::new(None),
             selected_speaker_index: Mutex::new(None),
             selected_camera_index: Mutex::new(None),
+            is_screen_sharing: Mutex::new(false),
+            screen_share_id: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::list_profiles,
@@ -95,6 +101,10 @@ pub fn run() {
             commands::calls::set_video_device,
             commands::calls::check_camera_status,
             commands::calls::load_camera_driver,
+            // Screen sharing
+            commands::calls::list_screens,
+            commands::calls::start_screen_share,
+            commands::calls::stop_screen_share,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

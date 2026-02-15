@@ -4,7 +4,7 @@ use tauri::State;
 
 use crate::audio::{AudioCapture, AudioDevice, AudioPlayback};
 use crate::managers::av_manager::CallState;
-use crate::video::{VideoCapture, VideoDevice};
+use crate::video::{ScreenCapture, ScreenInfo, VideoCapture, VideoDevice};
 use crate::AppState;
 
 /// Start a call with a friend
@@ -276,4 +276,32 @@ pub async fn load_camera_driver() -> Result<(), String> {
     {
         Err("Driver loading only supported on Linux".to_string())
     }
+}
+
+// ─── Screen Sharing ───────────────────────────────────────────────────────
+
+/// List available screens for sharing
+#[tauri::command]
+pub fn list_screens() -> Result<Vec<ScreenInfo>, String> {
+    ScreenCapture::list_screens().map_err(|e| e.to_string())
+}
+
+/// Start screen sharing (replaces camera capture)
+#[tauri::command]
+pub async fn start_screen_share(
+    state: State<'_, AppState>,
+    screen_id: Option<u32>,
+) -> Result<(), String> {
+    tracing::info!("Starting screen share with screen_id: {:?}", screen_id);
+    *state.screen_share_id.lock().await = screen_id;
+    *state.is_screen_sharing.lock().await = true;
+    Ok(())
+}
+
+/// Stop screen sharing (switch back to camera)
+#[tauri::command]
+pub async fn stop_screen_share(state: State<'_, AppState>) -> Result<(), String> {
+    tracing::info!("Stopping screen share");
+    *state.is_screen_sharing.lock().await = false;
+    Ok(())
 }

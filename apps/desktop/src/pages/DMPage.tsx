@@ -7,6 +7,7 @@ import * as api from "../api/tox";
 import type { DirectMessage } from "../api/tox";
 import { MiniCallIndicator } from "../components/call/VoiceCallUI";
 import { CallPanel } from "../components/call/CallPanel";
+import { FullscreenVideoModal } from "../components/video/FullscreenVideoModal";
 
 const EMPTY_MESSAGES: never[] = [];
 
@@ -38,19 +39,23 @@ function DMConversation({ friendNumber }: { friendNumber: number }) {
   const isInActiveCall = activeCall?.friendNumber === friendNumber && activeCall?.status === "in_progress";
 
   return (
-    <div className="flex flex-1 flex-col bg-discord-chat">
-      <DMHeader
-        friendNumber={friendNumber}
-        name={friendName}
-        isOnline={isOnline}
-        statusMessage={friend?.status_message}
-      />
-      {/* Show call panel above chat when in a call */}
-      {isInActiveCall && <CallPanel />}
-      {/* Chat is always visible */}
-      <MessageArea friendNumber={friendNumber} friendName={friendName} />
-      <MessageInput friendNumber={friendNumber} friendName={friendName} isOnline={isOnline} />
-    </div>
+    <>
+      <div className="flex flex-1 flex-col bg-discord-chat">
+        <DMHeader
+          friendNumber={friendNumber}
+          name={friendName}
+          isOnline={isOnline}
+          statusMessage={friend?.status_message}
+        />
+        {/* Show call panel above chat when in a call */}
+        {isInActiveCall && <CallPanel />}
+        {/* Chat is always visible */}
+        <MessageArea friendNumber={friendNumber} friendName={friendName} />
+        <MessageInput friendNumber={friendNumber} friendName={friendName} isOnline={isOnline} />
+      </div>
+      {/* Fullscreen video modal */}
+      <FullscreenVideoModal />
+    </>
   );
 }
 

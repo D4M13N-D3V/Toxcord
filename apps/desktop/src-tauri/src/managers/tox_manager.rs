@@ -12,7 +12,7 @@ use toxcord_tox::{AudioFrame, ProxyType, ToxAvEventHandler, ToxAvInstance, ToxIn
 
 use super::av_manager::{AvManager, CallState, CallStatus, TauriAvEventHandler, ToxAvEvent};
 use crate::audio::{AudioCapture, AudioMixer, AudioPlayback};
-use crate::video::{VideoCapture, VideoCaptureError, VideoFrameData};
+use crate::video::{ScreenCapture, VideoCapture, VideoCaptureError, VideoFrameData};
 use crate::AppState;
 
 /// Proxy configuration for Tox connections
@@ -963,15 +963,30 @@ fn run_tox_thread(
 
     // Video capture (managed on this thread, started when video calls are active)
     let mut video_capture: Option<VideoCapture> = None;
+    let mut screen_capture: Option<ScreenCapture> = None;
     let mut video_active = false;
     let mut video_capture_failed = false; // Tracks if capture failed, to avoid retry loop
 
-    // Bootstrap to DHT nodes
+    // Bootstrap to DHT nodes and add TCP relays for NAT traversal fallback
     for node in default_bootstrap_nodes() {
+        // Bootstrap for DHT discovery (UDP)
         if let Err(e) = tox.bootstrap(&node.address, node.port, &node.public_key) {
             warn!("Failed to bootstrap to {}: {e}", node.address);
         }
+
+        // Add TCP relay for each supported port - essential for NAT traversal
+        // when direct UDP connection fails (common behind symmetric NATs/firewalls)
+        for tcp_port in &node.tcp_ports {
+            if let Err(e) = tox.add_tcp_relay(&node.address, *tcp_port, &node.public_key) {
+                warn!("Failed to add TCP relay {}:{}: {e}", node.address, tcp_port);
+            } else {
+                debug!("Added TCP relay {}:{}", node.address, tcp_port);
+            }
+        }
     }
+
+    info!("Bootstrap complete: {} nodes configured with TCP relay support",
+          default_bootstrap_nodes().len());
 
     info!("Tox thread started, address: {}", tox.self_address());
 
@@ -1568,30 +1583,82 @@ fn run_tox_thread(
 
         // Start video capture when a video call becomes active (and hasn't already failed)
         if has_video_call && !video_active && !video_capture_failed {
-            // Get selected camera index from app state
-            let selected_camera_index = {
+            // Check if screen sharing is active
+            let (is_screen_sharing, screen_share_id) = {
                 let state = app_handle.state::<AppState>();
-                // Use try_lock to avoid blocking the event loop
-                state.selected_camera_index.try_lock().ok().and_then(|guard| *guard)
+                let sharing = state.is_screen_sharing.try_lock().ok().map(|g| *g).unwrap_or(false);
+                let screen_id = state.screen_share_id.try_lock().ok().and_then(|g| *g);
+                (sharing, screen_id)
             };
-            info!("Starting video capture for active video call (device index: {:?})", selected_camera_index);
-            match VideoCapture::start_with_device(selected_camera_index, video_tx.clone(), video_error_tx.clone()) {
-                Ok(capture) => {
-                    video_capture = Some(capture);
-                    video_active = true;
-                    info!("Video capture started successfully");
-                }
-                Err(e) => {
-                    error!("Failed to start video capture: {e}");
-                    video_capture_failed = true;
-                    // Notify frontend about the video capture error
-                    let error_event = ToxAvEvent::VideoError {
-                        error: e.to_string(),
-                    };
-                    if let Err(emit_err) = app_handle.emit("toxav://local-video", &error_event) {
-                        error!("Failed to emit video error event: {emit_err}");
+
+            if is_screen_sharing {
+                // Start screen capture
+                info!("Starting screen capture for active video call (screen_id: {:?})", screen_share_id);
+                match ScreenCapture::start(screen_share_id, video_tx.clone(), video_error_tx.clone()) {
+                    Ok(capture) => {
+                        screen_capture = Some(capture);
+                        video_active = true;
+                        info!("Screen capture started successfully");
+                    }
+                    Err(e) => {
+                        error!("Failed to start screen capture: {e}");
+                        video_capture_failed = true;
+                        let error_event = ToxAvEvent::VideoError {
+                            error: e.to_string(),
+                        };
+                        if let Err(emit_err) = app_handle.emit("toxav://local-video", &error_event) {
+                            error!("Failed to emit video error event: {emit_err}");
+                        }
                     }
                 }
+            } else {
+                // Start camera capture
+                let selected_camera_index = {
+                    let state = app_handle.state::<AppState>();
+                    state.selected_camera_index.try_lock().ok().and_then(|guard| *guard)
+                };
+                info!("Starting video capture for active video call (device index: {:?})", selected_camera_index);
+                match VideoCapture::start_with_device(selected_camera_index, video_tx.clone(), video_error_tx.clone()) {
+                    Ok(capture) => {
+                        video_capture = Some(capture);
+                        video_active = true;
+                        info!("Video capture started successfully");
+                    }
+                    Err(e) => {
+                        error!("Failed to start video capture: {e}");
+                        video_capture_failed = true;
+                        let error_event = ToxAvEvent::VideoError {
+                            error: e.to_string(),
+                        };
+                        if let Err(emit_err) = app_handle.emit("toxav://local-video", &error_event) {
+                            error!("Failed to emit video error event: {emit_err}");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check if screen sharing state changed (to switch between camera and screen)
+        if has_video_call && video_active {
+            let (is_screen_sharing_now, _) = {
+                let state = app_handle.state::<AppState>();
+                let sharing = state.is_screen_sharing.try_lock().ok().map(|g| *g).unwrap_or(false);
+                let screen_id = state.screen_share_id.try_lock().ok().and_then(|g| *g);
+                (sharing, screen_id)
+            };
+
+            // Detect state change: screen_capture is Some means we're screen sharing, None means camera
+            let currently_screen_sharing = screen_capture.is_some();
+            if is_screen_sharing_now != currently_screen_sharing {
+                info!(
+                    "Screen sharing state changed: {} -> {}",
+                    currently_screen_sharing, is_screen_sharing_now
+                );
+                // Stop current capture
+                video_capture = None;
+                screen_capture = None;
+                video_active = false;
+                // Will restart with new source on next iteration
             }
         }
 
@@ -1606,15 +1673,17 @@ fn run_tox_thread(
             if let Err(emit_err) = app_handle.emit("toxav://local-video", &error_event) {
                 error!("Failed to emit video error event: {emit_err}");
             }
-            // Stop video capture since it failed
+            // Stop video/screen capture since it failed
             video_capture = None;
+            screen_capture = None;
             video_active = false;
         }
 
         // Stop video capture when no video calls are active
         if !has_video_call && video_active {
-            info!("Stopping video capture - no active video calls");
+            info!("Stopping video/screen capture - no active video calls");
             video_capture = None;
+            screen_capture = None;
             video_active = false;
         }
 

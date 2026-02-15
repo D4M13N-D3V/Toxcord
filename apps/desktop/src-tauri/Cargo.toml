@@ -36,6 +36,9 @@ rubato = "0.15"  # Audio resampling
 # Video capture
 nokhwa = { version = "0.10", features = ["input-native"] }
 
+# Screen capture
+xcap = "0.0.14"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 

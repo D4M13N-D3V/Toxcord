@@ -6,9 +6,11 @@ export function VideoCallUI() {
   const activeCall = useCallStore((s) => s.activeCall);
   const isMuted = useCallStore((s) => s.isMuted);
   const isDeafened = useCallStore((s) => s.isDeafened);
+  const isScreenSharing = useCallStore((s) => s.isScreenSharing);
   const toggleMute = useCallStore((s) => s.toggleMute);
   const toggleDeafen = useCallStore((s) => s.toggleDeafen);
   const toggleVideo = useCallStore((s) => s.toggleVideo);
+  const toggleScreenShare = useCallStore((s) => s.toggleScreenShare);
   const hangup = useCallStore((s) => s.hangup);
 
   if (!activeCall || activeCall.status !== "in_progress") {
@@ -111,10 +113,15 @@ export function VideoCallUI() {
         {/* Separator */}
         <div className="mx-2 h-8 w-px bg-[#3f4147]" />
 
-        {/* Screen share - placeholder */}
+        {/* Screen share */}
         <button
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#3c3f45] transition-colors hover:bg-[#4e5058]"
-          title="Share Your Screen"
+          onClick={() => toggleScreenShare()}
+          className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+            isScreenSharing
+              ? "bg-[#ed4245] hover:bg-[#ed4245]/80"
+              : "bg-[#3c3f45] hover:bg-[#4e5058]"
+          }`}
+          title={isScreenSharing ? "Stop Sharing" : "Share Your Screen"}
         >
           <ScreenShareIcon className="h-5 w-5 text-white" />
         </button>

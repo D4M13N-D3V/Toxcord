@@ -159,6 +159,28 @@ export async function loadCameraDriver(): Promise<void> {
   return invoke("load_camera_driver");
 }
 
+// ─── Screen Sharing ───────────────────────────────────────────────────
+
+export interface ScreenInfo {
+  id: number;
+  name: string;
+  width: number;
+  height: number;
+  is_primary: boolean;
+}
+
+export async function listScreens(): Promise<ScreenInfo[]> {
+  return invoke("list_screens");
+}
+
+export async function startScreenShare(screenId?: number): Promise<void> {
+  return invoke("start_screen_share", { screenId });
+}
+
+export async function stopScreenShare(): Promise<void> {
+  return invoke("stop_screen_share");
+}
+
 // ─── Event Listening ─────────────────────────────────────────────────
 
 export function onToxAvEvent(

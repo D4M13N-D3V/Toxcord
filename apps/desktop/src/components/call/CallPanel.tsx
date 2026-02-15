@@ -12,9 +12,11 @@ export function CallPanel() {
   const activeCall = useCallStore((s) => s.activeCall);
   const isMuted = useCallStore((s) => s.isMuted);
   const isDeafened = useCallStore((s) => s.isDeafened);
+  const isScreenSharing = useCallStore((s) => s.isScreenSharing);
   const toggleMute = useCallStore((s) => s.toggleMute);
   const toggleDeafen = useCallStore((s) => s.toggleDeafen);
   const toggleVideo = useCallStore((s) => s.toggleVideo);
+  const toggleScreenShare = useCallStore((s) => s.toggleScreenShare);
   const hangup = useCallStore((s) => s.hangup);
   const selectedMicId = useCallStore((s) => s.selectedMicId);
   const selectedSpeakerId = useCallStore((s) => s.selectedSpeakerId);
@@ -22,6 +24,7 @@ export function CallPanel() {
   const setSelectedMic = useCallStore((s) => s.setSelectedMic);
   const setSelectedSpeaker = useCallStore((s) => s.setSelectedSpeaker);
   const setSelectedCamera = useCallStore((s) => s.setSelectedCamera);
+  const toggleFullscreen = useCallStore((s) => s.toggleFullscreen);
 
   const [showDevicePicker, setShowDevicePicker] = useState(false);
 
@@ -37,7 +40,11 @@ export function CallPanel() {
       <div className="flex items-center justify-center gap-3 p-3">
         {/* Remote participant */}
         <div className="flex flex-col items-center">
-          <div className="relative overflow-hidden rounded-lg bg-[#2b2d31]">
+          <button
+            onClick={() => toggleFullscreen()}
+            className="relative overflow-hidden rounded-lg bg-[#2b2d31] transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-discord-blurple"
+            title="Click to expand"
+          >
             {isVideoEnabled ? (
               <RemoteVideo
                 friendNumber={activeCall.friendNumber}
@@ -52,7 +59,7 @@ export function CallPanel() {
                 </div>
               </div>
             )}
-          </div>
+          </button>
           <span className="mt-1 text-xs font-medium text-discord-muted">
             {activeCall.friendName}
           </span>
@@ -60,7 +67,11 @@ export function CallPanel() {
 
         {/* Local participant (self) */}
         <div className="flex flex-col items-center">
-          <div className="relative overflow-hidden rounded-lg bg-[#2b2d31]">
+          <button
+            onClick={() => toggleFullscreen()}
+            className="relative overflow-hidden rounded-lg bg-[#2b2d31] transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-discord-blurple"
+            title="Click to expand"
+          >
             {isVideoEnabled ? (
               <LocalPreview className="h-32 w-44 object-cover" />
             ) : (
@@ -75,7 +86,7 @@ export function CallPanel() {
                 <MicOffIcon className="h-3 w-3 text-white" />
               </div>
             )}
-          </div>
+          </button>
           <span className="mt-1 text-xs font-medium text-discord-muted">You</span>
         </div>
 
@@ -115,6 +126,19 @@ export function CallPanel() {
             )}
           </button>
 
+          {/* Screen share */}
+          <button
+            onClick={() => toggleScreenShare()}
+            className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+              isScreenSharing
+                ? "bg-[#ed4245] hover:bg-[#ed4245]/80"
+                : "bg-[#3c3f45] hover:bg-[#4e5058]"
+            }`}
+            title={isScreenSharing ? "Stop Sharing" : "Share Your Screen"}
+          >
+            <ScreenShareIcon className="h-4 w-4 text-white" />
+          </button>
+
           {/* Deafen */}
           <button
             onClick={() => toggleDeafen()}
@@ -143,6 +167,15 @@ export function CallPanel() {
             title="Device settings"
           >
             <SettingsIcon className="h-4 w-4 text-white" />
+          </button>
+
+          {/* Expand/Fullscreen */}
+          <button
+            onClick={() => toggleFullscreen()}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3c3f45] transition-colors hover:bg-[#4e5058]"
+            title="Expand video"
+          >
+            <ExpandIcon className="h-4 w-4 text-white" />
           </button>
 
           {/* Hangup */}
@@ -227,6 +260,22 @@ function PhoneOffIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24">
       <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
+    </svg>
+  );
+}
+
+function ScreenShareIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z" />
+    </svg>
+  );
+}
+
+function ExpandIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
     </svg>
   );
 }
