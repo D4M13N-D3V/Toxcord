@@ -99,11 +99,13 @@ jobs:
           install: >-
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
             mingw-w64-x86_64-pkg-config
             mingw-w64-x86_64-libsodium
             mingw-w64-x86_64-opus
             mingw-w64-x86_64-libvpx
             mingw-w64-x86_64-rust
+            mingw-w64-x86_64-openssl
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -155,6 +157,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           export PATH="$PATH:/c/Users/runneradmin/setup-pnpm/node_modules/.bin:/c/Program Files/nodejs"
+          # Configure CMake to use Ninja with MinGW toolchain
+          export CMAKE_GENERATOR="Ninja"
+          export CMAKE_C_COMPILER=/mingw64/bin/gcc.exe
+          export CMAKE_CXX_COMPILER=/mingw64/bin/g++.exe
+          export CMAKE_PREFIX_PATH="/mingw64"
+          export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig"
+          export SODIUM_LIB_DIR="/mingw64/lib"
+          export SODIUM_INCLUDE_DIR="/mingw64/include"
+          export LIBSODIUM_INCLUDE_DIR="/mingw64/include"
+          export LIBSODIUM_LIB_DIR="/mingw64/lib"
+          export SODIUM_USE_PKG_CONFIG=1
+          export CC=/mingw64/bin/gcc.exe
+          export CXX=/mingw64/bin/g++.exe
           cd apps/desktop
           cargo tauri build
 
