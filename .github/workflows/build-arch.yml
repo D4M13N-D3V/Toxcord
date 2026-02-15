@@ -140,11 +140,7 @@ jobs:
           # Download and extract linuxdeploy
           curl -L -o /tmp/linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
           chmod +x /tmp/linuxdeploy.AppImage
-          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && cd -
-
-          curl -L -o /tmp/linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          chmod +x /tmp/linuxdeploy-plugin-appimage.AppImage
-          cd /tmp && ./linuxdeploy-plugin-appimage.AppImage --appimage-extract && mv squashfs-root linuxdeploy-plugin-appimage && cd -
+          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && mv squashfs-root linuxdeploy && cd -
 
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
@@ -155,7 +151,7 @@ jobs:
           cp apps/desktop/src-tauri/icons/256x256.png AppDir/usr/share/icons/hicolor/256x256/apps/toxcord.png
           cp apps/desktop/src-tauri/icons/256x256.png AppDir/toxcord.png
 
-          cat > AppDir/usr/share/applications/toxcord.desktop << EOF
+          cat > AppDir/usr/share/applications/toxcord.desktop << 'EOF'
           [Desktop Entry]
           Name=Toxcord
           Exec=toxcord
@@ -166,9 +162,9 @@ jobs:
 
           cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
 
-          # Create AppImage
+          # Create AppImage using linuxdeploy with bundled plugin
           export OUTPUT="toxcord-${VERSION}-arch-x86_64.AppImage"
-          /tmp/squashfs-root/AppRun --appdir AppDir --plugin gtk --output appimage
+          /tmp/linuxdeploy/AppRun --appdir AppDir --output appimage
 
           mkdir -p artifacts
           mv *.AppImage "artifacts/"
@@ -253,11 +249,7 @@ jobs:
           # Download and extract linuxdeploy
           curl -L -o /tmp/linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
           chmod +x /tmp/linuxdeploy.AppImage
-          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && cd -
-
-          curl -L -o /tmp/linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          chmod +x /tmp/linuxdeploy-plugin-appimage.AppImage
-          cd /tmp && ./linuxdeploy-plugin-appimage.AppImage --appimage-extract && mv squashfs-root linuxdeploy-plugin-appimage && cd -
+          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && mv squashfs-root linuxdeploy && cd -
 
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
@@ -268,7 +260,7 @@ jobs:
           cp apps/desktop/src-tauri/icons/256x256.png AppDir/usr/share/icons/hicolor/256x256/apps/toxcord.png
           cp apps/desktop/src-tauri/icons/256x256.png AppDir/toxcord.png
 
-          cat > AppDir/usr/share/applications/toxcord.desktop << EOF
+          cat > AppDir/usr/share/applications/toxcord.desktop << 'EOF'
           [Desktop Entry]
           Name=Toxcord
           Exec=toxcord
@@ -279,9 +271,9 @@ jobs:
 
           cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
 
-          # Create AppImage
+          # Create AppImage using linuxdeploy with bundled plugin
           export OUTPUT="toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
-          /tmp/squashfs-root/AppRun --appdir AppDir --plugin gtk --output appimage
+          /tmp/linuxdeploy/AppRun --appdir AppDir --output appimage
 
           mkdir -p artifacts
           mv *.AppImage "artifacts/"
