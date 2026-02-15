@@ -73,7 +73,7 @@ jobs:
     needs: version
     container:
       image: archlinux:base-devel
-      options: --privileged
+      options: --privileged --device /dev/fuse
     steps:
       - name: Install system dependencies
         run: |
@@ -165,7 +165,7 @@ jobs:
     needs: version
     container:
       image: archlinux:base-devel
-      options: --privileged
+      options: --privileged --device /dev/fuse
     steps:
       - name: Install system dependencies
         run: |
