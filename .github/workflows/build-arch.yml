@@ -132,6 +132,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           TOXCORD_STATIC: "1"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
 
       - name: Prepare artifacts
         run: |
@@ -220,6 +221,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           TOXCORD_STATIC: "1"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
 
       - name: Prepare artifacts
         run: |
