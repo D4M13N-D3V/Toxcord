@@ -126,6 +126,19 @@ jobs:
             jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
           fi
 
+      - name: Setup linuxdeploy
+        run: |
+          mkdir -p /tmp/linuxdeploy
+          cd /tmp/linuxdeploy
+          curl -L -o linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy.AppImage
+          ./linuxdeploy.AppImage --appimage-extract
+          mv squashfs-root linuxdeploy
+          curl -L -o linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy-plugin-appimage.AppImage
+          ./linuxdeploy-plugin-appimage.AppImage --appimage-extract
+          mv squashfs-root linuxdeploy-plugin-appimage
+
       - name: Build Tauri App
         run: |
           cd apps/desktop
@@ -134,7 +147,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           TOXCORD_STATIC: "1"
-          APPIMAGE_EXTRACT_AND_RUN: "1"
+          LINUXDEPLOY: "/tmp/linuxdeploy/linuxdeploy/AppRun"
+          LINUXDEPLOY_PLUGIN_APPIMAGE: "/tmp/linuxdeploy/linuxdeploy-plugin-appimage/AppRun"
 
       - name: Prepare artifacts
         run: |
@@ -217,6 +231,19 @@ jobs:
             jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
           fi
 
+      - name: Setup linuxdeploy
+        run: |
+          mkdir -p /tmp/linuxdeploy
+          cd /tmp/linuxdeploy
+          curl -L -o linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy.AppImage
+          ./linuxdeploy.AppImage --appimage-extract
+          mv squashfs-root linuxdeploy
+          curl -L -o linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy-plugin-appimage.AppImage
+          ./linuxdeploy-plugin-appimage.AppImage --appimage-extract
+          mv squashfs-root linuxdeploy-plugin-appimage
+
       - name: Build Tauri App with I2P
         run: |
           cd apps/desktop
@@ -225,7 +252,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           TOXCORD_STATIC: "1"
-          APPIMAGE_EXTRACT_AND_RUN: "1"
+          LINUXDEPLOY: "/tmp/linuxdeploy/linuxdeploy/AppRun"
+          LINUXDEPLOY_PLUGIN_APPIMAGE: "/tmp/linuxdeploy/linuxdeploy-plugin-appimage/AppRun"
 
       - name: Prepare artifacts
         run: |
