@@ -170,6 +170,10 @@ jobs:
           export SODIUM_USE_PKG_CONFIG=1
           export CC=/mingw64/bin/gcc.exe
           export CXX=/mingw64/bin/g++.exe
+          # OpenSSL for libsqlite3-sys (SQLCipher)
+          export OPENSSL_DIR="/mingw64"
+          export OPENSSL_LIB_DIR="/mingw64/lib"
+          export OPENSSL_INCLUDE_DIR="/mingw64/include"
           cd apps/desktop
           cargo tauri build
 
