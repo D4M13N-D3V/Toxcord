@@ -1,0 +1,282 @@
+name: Build Arch Linux
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate semantic version
+        id: version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_VERSION=${LATEST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VERSION"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
+          if git describe --tags --abbrev=0 &>/dev/null; then
+            COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
+          else
+            COMMITS=$(git log --oneline)
+          fi
+
+          BUMP="patch"
+          while IFS= read -r commit; do
+            if echo "$commit" | grep -qiE "^[a-f0-9]+ (feat|fix|refactor|perf|style|test|docs|build|ci|chore)(\(.+\))?!:|BREAKING CHANGE"; then
+              BUMP="major"
+              break
+            fi
+            if echo "$commit" | grep -qiE "^[a-f0-9]+ feat(\(.+\))?:"; then
+              if [ "$BUMP" != "major" ]; then
+                BUMP="minor"
+              fi
+            fi
+          done <<< "$COMMITS"
+
+          case $BUMP in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            VERSION="${MAJOR}.${MINOR}.${PATCH}-pr.${{ github.event.pull_request.number }}"
+          else
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_tag=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "Calculated version: ${VERSION}"
+
+  build-arch:
+    name: Build Arch Linux AppImage
+    runs-on: ubuntu-latest
+    needs: version
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            git \
+            rustup \
+            nodejs \
+            npm \
+            cmake \
+            pkg-config \
+            libsodium \
+            opus \
+            libvpx \
+            gtk3 \
+            webkit2gtk-4.1 \
+            libappindicator-gtk3 \
+            librsvg \
+            alsa-lib \
+            fuse2 \
+            file \
+            jq
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Rust
+        run: |
+          rustup default stable
+          rustup component add clippy rustfmt
+
+      - name: Setup pnpm
+        run: npm install -g pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli
+
+      - name: Update version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          if [ -f "apps/desktop/src-tauri/tauri.conf.json" ]; then
+            jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
+          fi
+
+      - name: Build Tauri App
+        run: |
+          cd apps/desktop
+          cargo tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TOXCORD_STATIC: "1"
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+          VERSION="${{ needs.version.outputs.version }}"
+          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
+            cp "$APPIMAGE" "artifacts/toxcord-${VERSION}-arch-x86_64.AppImage"
+            chmod +x "artifacts/toxcord-${VERSION}-arch-x86_64.AppImage"
+            echo "Copied AppImage: $APPIMAGE"
+          else
+            echo "ERROR: No AppImage found"
+            find target -name "*.AppImage" 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: toxcord-arch-${{ needs.version.outputs.version }}
+          path: artifacts/*
+          retention-days: 30
+          if-no-files-found: error
+
+  build-arch-i2p:
+    name: Build Arch Linux AppImage (with I2P)
+    runs-on: ubuntu-latest
+    needs: version
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            git \
+            rustup \
+            nodejs \
+            npm \
+            cmake \
+            pkg-config \
+            libsodium \
+            opus \
+            libvpx \
+            gtk3 \
+            webkit2gtk-4.1 \
+            libappindicator-gtk3 \
+            librsvg \
+            alsa-lib \
+            fuse2 \
+            file \
+            jq
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Rust
+        run: |
+          rustup default stable
+
+      - name: Setup pnpm
+        run: npm install -g pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli
+
+      - name: Update version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          if [ -f "apps/desktop/src-tauri/tauri.conf.json" ]; then
+            jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
+          fi
+
+      - name: Build Tauri App with I2P
+        run: |
+          cd apps/desktop
+          cargo tauri build --features i2p
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TOXCORD_STATIC: "1"
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+          VERSION="${{ needs.version.outputs.version }}"
+          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
+            cp "$APPIMAGE" "artifacts/toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
+            chmod +x "artifacts/toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
+            echo "Copied AppImage: $APPIMAGE"
+          else
+            echo "ERROR: No AppImage found"
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: toxcord-i2p-arch-${{ needs.version.outputs.version }}
+          path: artifacts/*
+          retention-days: 30
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [version, build-arch, build-arch-i2p]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate changelog
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LATEST_TAG" ]; then
+            CHANGELOG=$(git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          echo "## What's Changed (Arch Linux)" > release_notes.md
+          echo "" >> release_notes.md
+          echo "$CHANGELOG" >> release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.version.outputs.version_tag }}-arch
+          name: Toxcord ${{ needs.version.outputs.version }} (Arch Linux)
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
