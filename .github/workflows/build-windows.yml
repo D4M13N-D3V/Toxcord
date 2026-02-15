@@ -157,7 +157,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
-          export PATH="$PATH:/c/Users/runneradmin/setup-pnpm/node_modules/.bin:/c/Program Files/nodejs"
+          # Use MSYS2 tools FIRST to override system Rust
+          export PATH="/mingw64/bin:$PATH:/c/Users/runneradmin/setup-pnpm/node_modules/.bin:/c/Program Files/nodejs"
           # Configure CMake to use Ninja with MinGW toolchain
           export CMAKE_GENERATOR="Ninja"
           export CMAKE_C_COMPILER=/mingw64/bin/gcc.exe
@@ -177,6 +178,10 @@ jobs:
           export OPENSSL_DIR="/mingw64"
           export OPENSSL_LIB_DIR="/mingw64/lib"
           export OPENSSL_INCLUDE_DIR="/mingw64/include"
+          # Debug: show which cargo and rustc are being used
+          which cargo
+          which rustc
+          rustc --version --verbose
           cd apps/desktop
           # Build using MSYS2's native MinGW Rust toolchain
           cargo tauri build
