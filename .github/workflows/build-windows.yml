@@ -142,9 +142,17 @@ jobs:
           VERSION="${{ needs.version.outputs.version }}"
           sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
 
+      - name: Build frontend
+        run: |
+          cd apps/desktop
+          pnpm build
+
       - name: Build Tauri App
         shell: msys2 {0}
+        env:
+          TAURI_SKIP_DEVTOOLS_CHECK: true
         run: |
+          export PATH="$PATH:/c/Users/runneradmin/setup-pnpm/node_modules/.bin:/c/Program Files/nodejs"
           cd apps/desktop
           cargo tauri build
         env:
