@@ -105,11 +105,26 @@ jobs:
 
       - name: Install AppImage tools
         run: |
-          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool
-          chmod +x /usr/local/bin/appimagetool
-          # Extract since FUSE might not work in container
-          cd /usr/local/bin && ./appimagetool --appimage-extract
-          ln -sf /usr/local/bin/squashfs-root/AppRun /usr/local/bin/appimagetool
+          # Install FUSE for AppImage support
+          dnf install -y fuse fuse-libs squashfs-tools
+
+          # Download and extract linuxdeploy (Tauri uses this)
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage -O /usr/local/bin/linuxdeploy
+          chmod +x /usr/local/bin/linuxdeploy
+          cd /usr/local/bin && ./linuxdeploy --appimage-extract 2>/dev/null || true
+          if [ -d squashfs-root ]; then
+            mv squashfs-root linuxdeploy-extracted
+            ln -sf /usr/local/bin/linuxdeploy-extracted/AppRun /usr/local/bin/linuxdeploy
+          fi
+
+          # Download and extract linuxdeploy-plugin-appimage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage -O /usr/local/bin/linuxdeploy-plugin-appimage
+          chmod +x /usr/local/bin/linuxdeploy-plugin-appimage
+          cd /usr/local/bin && ./linuxdeploy-plugin-appimage --appimage-extract 2>/dev/null || true
+          if [ -d squashfs-root ]; then
+            mv squashfs-root linuxdeploy-plugin-appimage-extracted
+            ln -sf /usr/local/bin/linuxdeploy-plugin-appimage-extracted/AppRun /usr/local/bin/linuxdeploy-plugin-appimage
+          fi
 
       - name: Install Rust
         run: |
@@ -158,6 +173,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          APPIMAGE_EXTRACT_AND_RUN: "1"
 
       - name: Debug - List build outputs
         run: |
