@@ -126,44 +126,52 @@ jobs:
             jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
           fi
 
-      - name: Setup linuxdeploy
-        run: |
-          mkdir -p /tmp/linuxdeploy
-          cd /tmp/linuxdeploy
-          curl -L -o linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy.AppImage
-          ./linuxdeploy.AppImage --appimage-extract
-          mv squashfs-root linuxdeploy
-          curl -L -o linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          chmod +x linuxdeploy-plugin-appimage.AppImage
-          ./linuxdeploy-plugin-appimage.AppImage --appimage-extract
-          mv squashfs-root linuxdeploy-plugin-appimage
-
-      - name: Build Tauri App
+      - name: Build binary
         run: |
           cd apps/desktop
-          cargo tauri build
+          cargo build --release
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           TOXCORD_STATIC: "1"
-          LINUXDEPLOY: "/tmp/linuxdeploy/linuxdeploy/AppRun"
-          LINUXDEPLOY_PLUGIN_APPIMAGE: "/tmp/linuxdeploy/linuxdeploy-plugin-appimage/AppRun"
 
-      - name: Prepare artifacts
+      - name: Create AppImage manually
         run: |
-          mkdir -p artifacts
           VERSION="${{ needs.version.outputs.version }}"
-          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
-          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
-            cp "$APPIMAGE" "artifacts/toxcord-${VERSION}-arch-x86_64.AppImage"
-            chmod +x "artifacts/toxcord-${VERSION}-arch-x86_64.AppImage"
-            echo "Copied AppImage: $APPIMAGE"
-          else
-            echo "ERROR: No AppImage found"
-            find target -name "*.AppImage" 2>/dev/null || true
-            exit 1
-          fi
+
+          # Download and extract linuxdeploy
+          curl -L -o /tmp/linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
+          chmod +x /tmp/linuxdeploy.AppImage
+          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && cd -
+
+          curl -L -o /tmp/linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x /tmp/linuxdeploy-plugin-appimage.AppImage
+          cd /tmp && ./linuxdeploy-plugin-appimage.AppImage --appimage-extract && mv squashfs-root linuxdeploy-plugin-appimage && cd -
+
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          cp target/release/toxcord AppDir/usr/bin/
+          cp apps/desktop/src-tauri/icons/256x256.png AppDir/usr/share/icons/hicolor/256x256/apps/toxcord.png
+          cp apps/desktop/src-tauri/icons/256x256.png AppDir/toxcord.png
+
+          cat > AppDir/usr/share/applications/toxcord.desktop << EOF
+          [Desktop Entry]
+          Name=Toxcord
+          Exec=toxcord
+          Icon=toxcord
+          Type=Application
+          Categories=Network;InstantMessaging;
+          EOF
+
+          cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
+
+          # Create AppImage
+          export OUTPUT="toxcord-${VERSION}-arch-x86_64.AppImage"
+          /tmp/squashfs-root/AppRun --appdir AppDir --plugin gtk --output appimage
+
+          mkdir -p artifacts
+          mv *.AppImage "artifacts/"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -231,43 +239,52 @@ jobs:
             jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
           fi
 
-      - name: Setup linuxdeploy
-        run: |
-          mkdir -p /tmp/linuxdeploy
-          cd /tmp/linuxdeploy
-          curl -L -o linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy.AppImage
-          ./linuxdeploy.AppImage --appimage-extract
-          mv squashfs-root linuxdeploy
-          curl -L -o linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          chmod +x linuxdeploy-plugin-appimage.AppImage
-          ./linuxdeploy-plugin-appimage.AppImage --appimage-extract
-          mv squashfs-root linuxdeploy-plugin-appimage
-
-      - name: Build Tauri App with I2P
+      - name: Build binary with I2P
         run: |
           cd apps/desktop
-          cargo tauri build --features i2p
+          cargo build --release --features i2p
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           TOXCORD_STATIC: "1"
-          LINUXDEPLOY: "/tmp/linuxdeploy/linuxdeploy/AppRun"
-          LINUXDEPLOY_PLUGIN_APPIMAGE: "/tmp/linuxdeploy/linuxdeploy-plugin-appimage/AppRun"
 
-      - name: Prepare artifacts
+      - name: Create AppImage manually
         run: |
-          mkdir -p artifacts
           VERSION="${{ needs.version.outputs.version }}"
-          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
-          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
-            cp "$APPIMAGE" "artifacts/toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
-            chmod +x "artifacts/toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
-            echo "Copied AppImage: $APPIMAGE"
-          else
-            echo "ERROR: No AppImage found"
-            exit 1
-          fi
+
+          # Download and extract linuxdeploy
+          curl -L -o /tmp/linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
+          chmod +x /tmp/linuxdeploy.AppImage
+          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && cd -
+
+          curl -L -o /tmp/linuxdeploy-plugin-appimage.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x /tmp/linuxdeploy-plugin-appimage.AppImage
+          cd /tmp && ./linuxdeploy-plugin-appimage.AppImage --appimage-extract && mv squashfs-root linuxdeploy-plugin-appimage && cd -
+
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          cp target/release/toxcord AppDir/usr/bin/
+          cp apps/desktop/src-tauri/icons/256x256.png AppDir/usr/share/icons/hicolor/256x256/apps/toxcord.png
+          cp apps/desktop/src-tauri/icons/256x256.png AppDir/toxcord.png
+
+          cat > AppDir/usr/share/applications/toxcord.desktop << EOF
+          [Desktop Entry]
+          Name=Toxcord
+          Exec=toxcord
+          Icon=toxcord
+          Type=Application
+          Categories=Network;InstantMessaging;
+          EOF
+
+          cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
+
+          # Create AppImage
+          export OUTPUT="toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
+          /tmp/squashfs-root/AppRun --appdir AppDir --plugin gtk --output appimage
+
+          mkdir -p artifacts
+          mv *.AppImage "artifacts/"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
