@@ -20,7 +20,7 @@ use std::path::PathBuf;
 #[cfg(feature = "i2p")]
 use std::sync::Arc;
 #[cfg(feature = "i2p")]
-use tracing::info;
+use tracing::{info, warn};
 #[cfg(not(feature = "i2p"))]
 use tracing::warn;
 
@@ -188,6 +188,22 @@ impl I2pManager {
     #[cfg(not(feature = "i2p"))]
     pub fn is_running(&self) -> bool {
         false
+    }
+
+    /// Log the current I2P router status for verification
+    #[cfg(feature = "i2p")]
+    pub fn log_status(&self) {
+        if self.is_running() {
+            info!("[I2P-CHECK] I2P router RUNNING - SOCKS proxy available at 127.0.0.1:{}", self.socks_port);
+        } else {
+            warn!("[I2P-CHECK] I2P router NOT running - traffic will NOT be anonymized");
+        }
+    }
+
+    /// Log status (no-op when i2p feature is disabled)
+    #[cfg(not(feature = "i2p"))]
+    pub fn log_status(&self) {
+        warn!("[I2P-CHECK] I2P support not compiled in - traffic will NOT be anonymized");
     }
 }
 

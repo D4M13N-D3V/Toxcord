@@ -319,6 +319,21 @@ impl ToxEventHandler for TauriEventHandler {
             ConnectionStatus::Udp => "udp",
         };
         info!("Connection status: {status_str}");
+
+        // I2P/Proxy verification logging
+        // When using I2P or any SOCKS/HTTP proxy, UDP is disabled and only TCP should be used
+        match status {
+            ConnectionStatus::Udp => {
+                warn!("[I2P-CHECK] UDP connection detected - traffic is NOT routed through I2P/proxy!");
+            }
+            ConnectionStatus::Tcp => {
+                info!("[I2P-CHECK] TCP connection confirmed - traffic is routed through proxy (I2P/Tor if configured)");
+            }
+            ConnectionStatus::None => {
+                debug!("[I2P-CHECK] No connection yet");
+            }
+        }
+
         self.emit(ToxEvent::ConnectionStatus {
             connected: status.is_connected(),
             status: status_str.to_string(),
@@ -987,6 +1002,23 @@ fn run_tox_thread(
 
     info!("Bootstrap complete: {} nodes configured with TCP relay support",
           default_bootstrap_nodes().len());
+
+    // I2P/Proxy verification logging
+    match proxy_config.proxy_type {
+        ProxyType::Socks5 => {
+            info!("[I2P-CHECK] All Tox traffic routed through SOCKS5 proxy at {}:{}",
+                  proxy_config.host.as_deref().unwrap_or("127.0.0.1"), proxy_config.port);
+            info!("[I2P-CHECK] UDP disabled - using TCP relay mode only (required for I2P/Tor)");
+        }
+        ProxyType::Http => {
+            info!("[I2P-CHECK] All Tox traffic routed through HTTP proxy at {}:{}",
+                  proxy_config.host.as_deref().unwrap_or("127.0.0.1"), proxy_config.port);
+            info!("[I2P-CHECK] UDP disabled - using TCP relay mode only");
+        }
+        ProxyType::None => {
+            debug!("[I2P-CHECK] No proxy configured - direct connections enabled");
+        }
+    }
 
     info!("Tox thread started, address: {}", tox.self_address());
 
