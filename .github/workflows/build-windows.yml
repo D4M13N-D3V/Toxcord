@@ -133,6 +133,12 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      - name: Setup Rust GNU target
+        shell: msys2 {0}
+        run: |
+          rustup target add x86_64-pc-windows-gnu
+          rustup default stable-x86_64-pc-windows-gnu
+
       - name: Install Tauri CLI
         shell: msys2 {0}
         run: cargo install tauri-cli
@@ -175,7 +181,8 @@ jobs:
           export OPENSSL_LIB_DIR="/mingw64/lib"
           export OPENSSL_INCLUDE_DIR="/mingw64/include"
           cd apps/desktop
-          cargo tauri build
+          # Use GNU target to match MinGW libraries
+          cargo tauri build --target x86_64-pc-windows-gnu
 
       - name: Debug - List build outputs
         shell: bash
@@ -205,8 +212,11 @@ jobs:
             echo "Copied NSIS installer"
           fi
 
-          # Copy raw binary
-          if [ -f "target/release/toxcord.exe" ]; then
+          # Copy raw binary (check both possible locations)
+          if [ -f "target/x86_64-pc-windows-gnu/release/toxcord.exe" ]; then
+            cp "target/x86_64-pc-windows-gnu/release/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
+            echo "Copied binary from GNU target"
+          elif [ -f "target/release/toxcord.exe" ]; then
             cp "target/release/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
             echo "Copied binary"
           fi
