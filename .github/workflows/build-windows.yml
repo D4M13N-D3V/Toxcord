@@ -103,11 +103,7 @@ jobs:
             mingw-w64-x86_64-libsodium
             mingw-w64-x86_64-opus
             mingw-w64-x86_64-libvpx
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
+            mingw-w64-x86_64-rust
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -136,6 +132,7 @@ jobs:
         run: pnpm install
 
       - name: Install Tauri CLI
+        shell: msys2 {0}
         run: cargo install tauri-cli
         continue-on-error: true
 
@@ -148,9 +145,8 @@ jobs:
       - name: Build Tauri App
         shell: msys2 {0}
         run: |
-          export PATH="/mingw64/bin:$PATH"
           cd apps/desktop
-          cargo tauri build --target x86_64-pc-windows-gnu
+          cargo tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
@@ -168,7 +164,6 @@ jobs:
         run: |
           mkdir -p artifacts
           VERSION="${{ needs.version.outputs.version }}"
-          TARGET_DIR="target/x86_64-pc-windows-gnu/release"
 
           # Find and copy MSI installer
           MSI=$(find target -path "*/bundle/*.msi" 2>/dev/null | head -1)
@@ -185,8 +180,8 @@ jobs:
           fi
 
           # Copy raw binary
-          if [ -f "${TARGET_DIR}/toxcord.exe" ]; then
-            cp "${TARGET_DIR}/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
+          if [ -f "target/release/toxcord.exe" ]; then
+            cp "target/release/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
             echo "Copied binary"
           fi
 
