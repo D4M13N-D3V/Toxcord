@@ -84,6 +84,7 @@ jobs:
             npm \
             cmake \
             pkg-config \
+            clang \
             libsodium \
             opus \
             libvpx \
@@ -171,6 +172,7 @@ jobs:
             npm \
             cmake \
             pkg-config \
+            clang \
             libsodium \
             opus \
             libvpx \

@@ -193,7 +193,7 @@ jobs:
           APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
           if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
             cp "$APPIMAGE" "artifacts/toxcord-${VERSION}-ubuntu-x86_64.AppImage"
-            chmod +x "artifacts/toxcord-${VERSION}-linux-x86_64.AppImage"
+            chmod +x "artifacts/toxcord-${VERSION}-ubuntu-x86_64.AppImage"
             echo "Copied AppImage: $APPIMAGE"
           else
             echo "WARNING: No AppImage found in target/release/bundle"
@@ -307,7 +307,7 @@ jobs:
           APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
           if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
             cp "$APPIMAGE" "artifacts/toxcord-i2p-${VERSION}-ubuntu-x86_64.AppImage"
-            chmod +x "artifacts/toxcord-i2p-${VERSION}-linux-x86_64.AppImage"
+            chmod +x "artifacts/toxcord-i2p-${VERSION}-ubuntu-x86_64.AppImage"
             echo "Copied AppImage: $APPIMAGE"
           else
             echo "WARNING: No AppImage found in target/release/bundle"
