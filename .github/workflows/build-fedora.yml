@@ -240,3 +240,41 @@ jobs:
           path: artifacts/*
           retention-days: 30
           if-no-files-found: warn
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [version, build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: toxcord-fedora-${{ needs.version.outputs.version }}
+          path: release-files
+
+      - name: List release files
+        run: ls -la release-files/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.version.outputs.version_tag }}
+          name: Release ${{ needs.version.outputs.version }}
+          body: |
+            ## Toxcord ${{ needs.version.outputs.version }}
+
+            ### Fedora Downloads
+            - **AppImage**: `toxcord-${{ needs.version.outputs.version }}-fedora-x86_64.AppImage`
+            - **RPM**: `toxcord-${{ needs.version.outputs.version }}-fedora-x86_64.rpm`
+            - **Portable**: `toxcord-${{ needs.version.outputs.version }}-fedora-x86_64-portable.tar.gz`
+          files: release-files/*
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
