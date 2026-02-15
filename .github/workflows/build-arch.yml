@@ -96,7 +96,8 @@ jobs:
             fuse2 \
             file \
             jq \
-            xdg-utils
+            xdg-utils \
+            squashfs-tools
 
       - uses: actions/checkout@v4
         with:
@@ -186,7 +187,8 @@ jobs:
             fuse2 \
             file \
             jq \
-            xdg-utils
+            xdg-utils \
+            squashfs-tools
 
       - uses: actions/checkout@v4
         with:
