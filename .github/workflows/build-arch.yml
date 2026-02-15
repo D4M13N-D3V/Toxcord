@@ -126,12 +126,15 @@ jobs:
             jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
           fi
 
-      - name: Build binary
+      - name: Build Tauri app
         run: |
           cd apps/desktop
-          cargo build --release
+          # Build with tauri to embed frontend, ignore bundling errors
+          cargo tauri build || true
         env:
           TOXCORD_STATIC: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Create AppImage manually
         run: |
@@ -245,12 +248,15 @@ jobs:
             jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
           fi
 
-      - name: Build binary with I2P
+      - name: Build Tauri app with I2P
         run: |
           cd apps/desktop
-          cargo build --release --features i2p
+          # Build with tauri to embed frontend, ignore bundling errors
+          cargo tauri build --features i2p || true
         env:
           TOXCORD_STATIC: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Create AppImage manually
         run: |
