@@ -101,7 +101,7 @@ jobs:
           vcpkg install libsodium:x64-windows opus:x64-windows libvpx:x64-windows
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
