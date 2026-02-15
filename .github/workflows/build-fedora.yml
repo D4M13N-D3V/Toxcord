@@ -1,0 +1,223 @@
+name: Build Fedora
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate semantic version
+        id: version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_VERSION=${LATEST_TAG#v}
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_VERSION"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
+          if git describe --tags --abbrev=0 &>/dev/null; then
+            COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
+          else
+            COMMITS=$(git log --oneline)
+          fi
+
+          BUMP="patch"
+          while IFS= read -r commit; do
+            if echo "$commit" | grep -qiE "^[a-f0-9]+ (feat|fix|refactor|perf|style|test|docs|build|ci|chore)(\(.+\))?!:|BREAKING CHANGE"; then
+              BUMP="major"
+              break
+            fi
+            if echo "$commit" | grep -qiE "^[a-f0-9]+ feat(\(.+\))?:"; then
+              if [ "$BUMP" != "major" ]; then
+                BUMP="minor"
+              fi
+            fi
+          done <<< "$COMMITS"
+
+          case $BUMP in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            VERSION="${MAJOR}.${MINOR}.${PATCH}-pr.${{ github.event.pull_request.number }}"
+          else
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_tag=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "Calculated version: ${VERSION}"
+
+  build:
+    name: Build Fedora RPM
+    runs-on: ubuntu-latest
+    needs: version
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          dnf update -y
+          dnf install -y \
+            gcc gcc-c++ cmake pkg-config make \
+            libsodium-devel opus-devel libvpx-devel \
+            gtk3-devel webkit2gtk4.1-devel \
+            libappindicator-gtk3-devel librsvg2-devel \
+            alsa-lib-devel \
+            curl wget git patchelf \
+            nodejs npm
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: fedora-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            fedora-cargo-
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Install Tauri CLI
+        run: |
+          source $HOME/.cargo/env
+          cargo install tauri-cli || true
+
+      - name: Update version in Cargo.toml
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          if [ -f "apps/desktop/src-tauri/tauri.conf.json" ]; then
+            dnf install -y jq
+            jq ".version = \"${VERSION}\"" apps/desktop/src-tauri/tauri.conf.json > tmp.json && mv tmp.json apps/desktop/src-tauri/tauri.conf.json
+          fi
+
+      - name: Build Tauri App
+        run: |
+          source $HOME/.cargo/env
+          cd apps/desktop
+          cargo tauri build || true
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+      - name: Debug - List build outputs
+        run: |
+          echo "=== Target directory ==="
+          find target/release -name "toxcord*" -o -name "*.rpm" 2>/dev/null | head -20 || echo "No files found"
+          echo "=== Bundle directory ==="
+          find target/release/bundle -type f 2>/dev/null | head -20 || echo "No bundle directory"
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts
+          VERSION="${{ needs.version.outputs.version }}"
+
+          # Find and copy RPM package
+          RPM=$(find target/release/bundle -name "*.rpm" 2>/dev/null | head -1)
+          if [ -n "$RPM" ] && [ -f "$RPM" ]; then
+            cp "$RPM" "artifacts/toxcord-${VERSION}-fedora-x86_64.rpm"
+            echo "Copied RPM"
+          fi
+
+          # Copy raw binary with bundled libraries
+          if [ -f "target/release/toxcord" ]; then
+            mkdir -p "artifacts/toxcord-${VERSION}-fedora-x86_64-portable"
+            cp target/release/toxcord "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord"
+            chmod +x "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord"
+
+            # Bundle required shared libraries
+            mkdir -p "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib"
+            echo "=== ldd output ==="
+            ldd "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord" || true
+            echo "=== Bundling libs ==="
+            for lib in libsodium libopus libvpx; do
+              LIB_PATH=$(ldd "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
+              echo "Looking for $lib: found '$LIB_PATH'"
+              if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
+                cp "$LIB_PATH" "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib/"
+                echo "Bundled $lib from $LIB_PATH"
+              else
+                MANUAL_PATH=$(find /usr/lib64 /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
+                if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
+                  cp "$MANUAL_PATH" "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib/"
+                  echo "Bundled $lib from $MANUAL_PATH (manual)"
+                else
+                  echo "WARNING: Could not find $lib"
+                fi
+              fi
+            done
+            echo "=== Bundled libs ==="
+            ls -la "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib/" || true
+
+            # Set rpath
+            patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord" || true
+
+            # Create launcher script
+            printf '#!/bin/bash\nSCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"\nexec "$SCRIPT_DIR/toxcord" "$@"\n' > "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/run.sh"
+            chmod +x "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/run.sh"
+
+            # Create tarball
+            cd artifacts
+            tar -czvf "toxcord-${VERSION}-fedora-x86_64-portable.tar.gz" "toxcord-${VERSION}-fedora-x86_64-portable"
+            rm -rf "toxcord-${VERSION}-fedora-x86_64-portable"
+            cd ..
+            echo "Created portable tarball"
+          fi
+
+          echo "=== Artifacts ==="
+          ls -la artifacts/ || echo "No artifacts directory"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: toxcord-fedora-${{ needs.version.outputs.version }}
+          path: artifacts/*
+          retention-days: 30
+          if-no-files-found: warn
