@@ -134,14 +134,12 @@ jobs:
         run: pnpm install
 
       - name: Setup Rust GNU target
-        shell: msys2 {0}
         run: |
           rustup target add x86_64-pc-windows-gnu
-          rustup default stable-x86_64-pc-windows-gnu
 
       - name: Install Tauri CLI
         shell: msys2 {0}
-        run: cargo install tauri-cli
+        run: cargo install tauri-cli --target x86_64-pc-windows-gnu
         continue-on-error: true
 
       - name: Update version in Cargo.toml
