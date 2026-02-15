@@ -137,10 +137,10 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.version }}"
 
-          # Download and extract linuxdeploy
-          curl -L -o /tmp/linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
-          chmod +x /tmp/linuxdeploy.AppImage
-          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && mv squashfs-root linuxdeploy && cd -
+          # Download appimagetool
+          curl -L -o /tmp/appimagetool.AppImage https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool.AppImage
+          cd /tmp && ./appimagetool.AppImage --appimage-extract && mv squashfs-root appimagetool && cd -
 
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
@@ -162,11 +162,19 @@ jobs:
 
           cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
 
-          # Create AppImage using linuxdeploy with bundled plugin
-          # Disable strip since bundled strip is incompatible with newer Arch libraries
-          export OUTPUT="toxcord-${VERSION}-arch-x86_64.AppImage"
-          export DISABLE_STRIP=1
-          /tmp/linuxdeploy/AppRun --appdir AppDir --output appimage
+          # Create AppRun script
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          exec "${HERE}/usr/bin/toxcord" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # Create AppImage using appimagetool directly
+          export ARCH=x86_64
+          /tmp/appimagetool/AppRun AppDir "toxcord-${VERSION}-arch-x86_64.AppImage"
 
           mkdir -p artifacts
           mv *.AppImage "artifacts/"
@@ -248,10 +256,10 @@ jobs:
         run: |
           VERSION="${{ needs.version.outputs.version }}"
 
-          # Download and extract linuxdeploy
-          curl -L -o /tmp/linuxdeploy.AppImage https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage
-          chmod +x /tmp/linuxdeploy.AppImage
-          cd /tmp && ./linuxdeploy.AppImage --appimage-extract && mv squashfs-root linuxdeploy && cd -
+          # Download appimagetool
+          curl -L -o /tmp/appimagetool.AppImage https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool.AppImage
+          cd /tmp && ./appimagetool.AppImage --appimage-extract && mv squashfs-root appimagetool && cd -
 
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
@@ -273,11 +281,19 @@ jobs:
 
           cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
 
-          # Create AppImage using linuxdeploy with bundled plugin
-          # Disable strip since bundled strip is incompatible with newer Arch libraries
-          export OUTPUT="toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
-          export DISABLE_STRIP=1
-          /tmp/linuxdeploy/AppRun --appdir AppDir --output appimage
+          # Create AppRun script
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          exec "${HERE}/usr/bin/toxcord" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # Create AppImage using appimagetool directly
+          export ARCH=x86_64
+          /tmp/appimagetool/AppRun AppDir "toxcord-i2p-${VERSION}-arch-x86_64.AppImage"
 
           mkdir -p artifacts
           mv *.AppImage "artifacts/"
