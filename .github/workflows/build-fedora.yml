@@ -100,8 +100,16 @@ jobs:
             gtk3-devel webkit2gtk4.1-devel \
             libappindicator-gtk3-devel librsvg2-devel \
             alsa-lib-devel libv4l-devel kernel-headers clang-devel llvm-devel openssl-devel \
-            curl wget git patchelf \
+            curl wget git patchelf file \
             nodejs npm
+
+      - name: Install AppImage tools
+        run: |
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool
+          chmod +x /usr/local/bin/appimagetool
+          # Extract since FUSE might not work in container
+          cd /usr/local/bin && ./appimagetool --appimage-extract
+          ln -sf /usr/local/bin/squashfs-root/AppRun /usr/local/bin/appimagetool
 
       - name: Install Rust
         run: |
@@ -162,6 +170,13 @@ jobs:
         run: |
           mkdir -p artifacts
           VERSION="${{ needs.version.outputs.version }}"
+
+          # Find and copy AppImage
+          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
+            cp "$APPIMAGE" "artifacts/toxcord-${VERSION}-fedora-x86_64.AppImage"
+            echo "Copied AppImage"
+          fi
 
           # Find and copy RPM package
           RPM=$(find target/release/bundle -name "*.rpm" 2>/dev/null | head -1)
