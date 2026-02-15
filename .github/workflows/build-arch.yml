@@ -95,7 +95,8 @@ jobs:
             alsa-lib \
             fuse2 \
             file \
-            jq
+            jq \
+            xdg-utils
 
       - uses: actions/checkout@v4
         with:
@@ -183,7 +184,8 @@ jobs:
             alsa-lib \
             fuse2 \
             file \
-            jq
+            jq \
+            xdg-utils
 
       - uses: actions/checkout@v4
         with:
