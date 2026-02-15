@@ -71,6 +71,18 @@ pub enum ToxAvEvent {
         friend_number: u32,
         level: f32,
     },
+    /// Video frame received from a peer
+    VideoFrame {
+        friend_number: u32,
+        width: u16,
+        height: u16,
+        /// YUV420 data: Y plane followed by U plane followed by V plane
+        data: Vec<u8>,
+    },
+    /// Video capture error (e.g., no camera available)
+    VideoError {
+        error: String,
+    },
 }
 
 /// Manages active call state.
@@ -144,10 +156,22 @@ impl AvManager {
                 }
             }
 
+            // Update audio capability from callback
             call.has_audio = state.has_audio();
-            call.has_video = state.has_video();
-            debug!("Call state for friend {} updated: {:?} -> {:?}, has_audio={}, has_video={}",
-                   friend_number, old_state, call.state, call.has_audio, call.has_video);
+
+            // For video: preserve our original request, but also accept if remote enables it
+            // Don't overwrite has_video to false if we originally requested video
+            // This ensures video capture starts even if remote hasn't enabled video yet
+            let remote_has_video = state.has_video();
+            if remote_has_video && !call.has_video {
+                call.has_video = true;
+                info!("Remote enabled video for call with friend {}", friend_number);
+            }
+            // Note: We don't set has_video to false here, as that would break local preview
+            // The user can disable video via the toggle, which sets is_video_muted
+
+            debug!("Call state for friend {} updated: {:?} -> {:?}, has_audio={}, has_video={}, remote_has_video={}",
+                   friend_number, old_state, call.state, call.has_audio, call.has_video, remote_has_video);
         } else {
             warn!("update_call_state called for friend {} but no call exists", friend_number);
         }
@@ -202,6 +226,22 @@ impl AvManager {
     /// Check if deafened
     pub fn is_deafened(&self) -> bool {
         self.is_deafened
+    }
+
+    /// Set video muted state for a specific call
+    pub fn set_video_muted(&mut self, friend_number: u32, muted: bool) {
+        if let Some(call) = self.calls.get_mut(&friend_number) {
+            call.is_video_muted = muted;
+            debug!("Video muted for friend {}: {}", friend_number, muted);
+        }
+    }
+
+    /// Set audio muted state for a specific call
+    pub fn set_audio_muted(&mut self, friend_number: u32, muted: bool) {
+        if let Some(call) = self.calls.get_mut(&friend_number) {
+            call.is_audio_muted = muted;
+            debug!("Audio muted for friend {}: {}", friend_number, muted);
+        }
     }
 }
 
@@ -319,18 +359,74 @@ impl ToxAvEventHandler for TauriAvEventHandler {
         friend_number: u32,
         width: u16,
         height: u16,
-        _y: &[u8],
-        _u: &[u8],
-        _v: &[u8],
-        _y_stride: i32,
-        _u_stride: i32,
-        _v_stride: i32,
+        y: &[u8],
+        u: &[u8],
+        v: &[u8],
+        y_stride: i32,
+        u_stride: i32,
+        v_stride: i32,
     ) {
-        // TODO: Phase 5.6 - Video support
         debug!(
-            "Received video frame from friend {}: {}x{}",
-            friend_number, width, height
+            "Received video frame from friend {}: {}x{} (strides: {}, {}, {})",
+            friend_number, width, height, y_stride, u_stride, v_stride
         );
+
+        // Handle stride correction if needed
+        let w = width as usize;
+        let h = height as usize;
+        let uv_w = w / 2;
+        let uv_h = h / 2;
+
+        let y_stride_abs = y_stride.unsigned_abs() as usize;
+        let u_stride_abs = u_stride.unsigned_abs() as usize;
+        let v_stride_abs = v_stride.unsigned_abs() as usize;
+
+        // Copy data, removing stride padding if present
+        let y_data: Vec<u8> = if y_stride_abs == w {
+            y[..w * h].to_vec()
+        } else {
+            let mut data = Vec::with_capacity(w * h);
+            for row in 0..h {
+                let start = row * y_stride_abs;
+                data.extend_from_slice(&y[start..start + w]);
+            }
+            data
+        };
+
+        let u_data: Vec<u8> = if u_stride_abs == uv_w {
+            u[..uv_w * uv_h].to_vec()
+        } else {
+            let mut data = Vec::with_capacity(uv_w * uv_h);
+            for row in 0..uv_h {
+                let start = row * u_stride_abs;
+                data.extend_from_slice(&u[start..start + uv_w]);
+            }
+            data
+        };
+
+        let v_data: Vec<u8> = if v_stride_abs == uv_w {
+            v[..uv_w * uv_h].to_vec()
+        } else {
+            let mut data = Vec::with_capacity(uv_w * uv_h);
+            for row in 0..uv_h {
+                let start = row * v_stride_abs;
+                data.extend_from_slice(&v[start..start + uv_w]);
+            }
+            data
+        };
+
+        // Combine YUV planes into single buffer
+        let mut data = Vec::with_capacity(y_data.len() + u_data.len() + v_data.len());
+        data.extend_from_slice(&y_data);
+        data.extend_from_slice(&u_data);
+        data.extend_from_slice(&v_data);
+
+        self.emit(ToxAvEvent::VideoFrame {
+            friend_number,
+            width,
+            height,
+            data,
+        });
     }
 
     fn on_audio_bit_rate(&self, friend_number: u32, audio_bit_rate: u32) {

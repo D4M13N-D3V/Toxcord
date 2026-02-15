@@ -33,6 +33,12 @@ rusqlite = { workspace = true }
 cpal = "0.15"
 rubato = "0.15"  # Audio resampling
 
+# Video capture
+nokhwa = { version = "0.10", features = ["input-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
 # I2P support (optional)
 emissary-core = { version = "0.3", optional = true }
 emissary-util = { version = "0.3", optional = true, default-features = false, features = ["tokio"] }

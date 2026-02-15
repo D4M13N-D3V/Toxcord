@@ -1,7 +1,8 @@
 import { useCallStore } from "../../stores/callStore";
-import { VideoCallUI } from "../video/VideoCallUI";
+import { LocalPreview } from "./LocalPreview";
+import { RemoteVideo } from "./RemoteVideo";
 
-export function VoiceCallUI() {
+export function VideoCallUI() {
   const activeCall = useCallStore((s) => s.activeCall);
   const isMuted = useCallStore((s) => s.isMuted);
   const isDeafened = useCallStore((s) => s.isDeafened);
@@ -14,23 +15,30 @@ export function VoiceCallUI() {
     return null;
   }
 
-  // If video is enabled, render the video call UI instead
-  if (activeCall.hasVideo && !activeCall.isVideoMuted) {
-    return <VideoCallUI />;
-  }
+  const isVideoEnabled = activeCall.hasVideo && !activeCall.isVideoMuted;
 
   return (
     <div className="flex flex-1 flex-col bg-[#1e1f22]">
-      {/* Main area - Discord style with avatars */}
+      {/* Main video area - Discord style */}
       <div className="flex flex-1 items-center justify-center gap-4 p-4">
         {/* Remote participant */}
         <div className="flex flex-col items-center">
-          <div className="flex h-64 w-80 items-center justify-center rounded-lg bg-[#2b2d31]">
-            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-discord-blurple">
-              <span className="text-4xl font-bold text-white">
-                {activeCall.friendName[0]?.toUpperCase()}
-              </span>
-            </div>
+          <div className="relative overflow-hidden rounded-lg bg-[#2b2d31]">
+            {isVideoEnabled ? (
+              <RemoteVideo
+                friendNumber={activeCall.friendNumber}
+                className="h-64 w-80 object-cover"
+              />
+            ) : (
+              // Avatar fallback when no video
+              <div className="flex h-64 w-80 items-center justify-center">
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-discord-blurple">
+                  <span className="text-4xl font-bold text-white">
+                    {activeCall.friendName[0]?.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <span className="mt-2 text-sm font-medium text-white">
             {activeCall.friendName}
@@ -39,10 +47,17 @@ export function VoiceCallUI() {
 
         {/* Local participant (self) */}
         <div className="flex flex-col items-center">
-          <div className="relative flex h-64 w-80 items-center justify-center rounded-lg bg-[#2b2d31]">
-            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-discord-green">
-              <span className="text-4xl font-bold text-white">You</span>
-            </div>
+          <div className="relative overflow-hidden rounded-lg bg-[#2b2d31]">
+            {isVideoEnabled ? (
+              <LocalPreview className="h-64 w-80 object-cover" />
+            ) : (
+              // Avatar fallback when no video
+              <div className="flex h-64 w-80 items-center justify-center">
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-discord-green">
+                  <span className="text-4xl font-bold text-white">You</span>
+                </div>
+              </div>
+            )}
             {isMuted && (
               <div className="absolute bottom-2 right-2 rounded-full bg-discord-red p-1.5">
                 <MicOffIcon className="h-4 w-4 text-white" />
@@ -55,30 +70,53 @@ export function VoiceCallUI() {
 
       {/* Controls bar - Discord style */}
       <div className="flex items-center justify-center gap-2 border-t border-[#3f4147] bg-[#232428] p-4">
-        {/* Mic control */}
-        <button
-          onClick={() => toggleMute()}
-          className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
-            isMuted
-              ? "bg-[#ed4245] hover:bg-[#ed4245]/80"
-              : "bg-[#3c3f45] hover:bg-[#4e5058]"
-          }`}
-          title={isMuted ? "Unmute" : "Mute"}
-        >
-          {isMuted ? (
-            <MicOffIcon className="h-5 w-5 text-white" />
-          ) : (
-            <MicIcon className="h-5 w-5 text-white" />
-          )}
-        </button>
+        {/* Mic control with dropdown */}
+        <div className="flex items-center">
+          <button
+            onClick={() => toggleMute()}
+            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+              isMuted
+                ? "bg-[#ed4245] hover:bg-[#ed4245]/80"
+                : "bg-[#3c3f45] hover:bg-[#4e5058]"
+            }`}
+            title={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? (
+              <MicOffIcon className="h-5 w-5 text-white" />
+            ) : (
+              <MicIcon className="h-5 w-5 text-white" />
+            )}
+          </button>
+        </div>
 
-        {/* Video control */}
+        {/* Video control with dropdown */}
+        <div className="flex items-center">
+          <button
+            onClick={() => toggleVideo()}
+            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+              !isVideoEnabled
+                ? "bg-[#ed4245] hover:bg-[#ed4245]/80"
+                : "bg-[#3c3f45] hover:bg-[#4e5058]"
+            }`}
+            title={isVideoEnabled ? "Turn off camera" : "Turn on camera"}
+          >
+            {isVideoEnabled ? (
+              <VideoIcon className="h-5 w-5 text-white" />
+            ) : (
+              <VideoOffIcon className="h-5 w-5 text-white" />
+            )}
+          </button>
+        </div>
+
+        {/* Separator */}
+        <div className="mx-2 h-8 w-px bg-[#3f4147]" />
+
+        {/* Screen share - placeholder */}
         <button
-          onClick={() => toggleVideo()}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-[#3c3f45] transition-colors hover:bg-[#4e5058]"
-          title="Turn on camera"
+          title="Share Your Screen"
         >
-          <VideoOffIcon className="h-5 w-5 text-white" />
+          <ScreenShareIcon className="h-5 w-5 text-white" />
         </button>
 
         {/* Separator */}
@@ -114,51 +152,6 @@ export function VoiceCallUI() {
   );
 }
 
-/** Mini call indicator for showing in DM header during active call */
-export function MiniCallIndicator() {
-  const activeCall = useCallStore((s) => s.activeCall);
-  const isMuted = useCallStore((s) => s.isMuted);
-  const hangup = useCallStore((s) => s.hangup);
-
-  if (!activeCall || activeCall.status !== "in_progress") {
-    return null;
-  }
-
-  return (
-    <div className="flex items-center gap-3 rounded-lg bg-discord-green/20 px-3 py-2">
-      {/* Call info */}
-      <div className="flex items-center gap-2">
-        <div className="h-2 w-2 animate-pulse rounded-full bg-discord-green" />
-        <span className="text-sm font-medium text-discord-green">
-          {formatDuration(activeCall.duration)}
-        </span>
-      </div>
-
-      {/* Mute indicator */}
-      {isMuted && (
-        <div className="text-discord-red">
-          <MicOffIcon className="h-4 w-4" />
-        </div>
-      )}
-
-      {/* Hangup button */}
-      <button
-        onClick={() => hangup()}
-        className="flex h-6 w-6 items-center justify-center rounded-full bg-discord-red transition-colors hover:bg-discord-red/80"
-        title="End call"
-      >
-        <PhoneOffIcon className="h-3 w-3 text-white" />
-      </button>
-    </div>
-  );
-}
-
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
 // Icons
 function MicIcon({ className }: { className?: string }) {
   return (
@@ -173,6 +166,14 @@ function MicOffIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24">
       <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z" />
+    </svg>
+  );
+}
+
+function VideoIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
     </svg>
   );
 }
@@ -198,6 +199,14 @@ function HeadphoneOffIcon({ className }: { className?: string }) {
     <svg className={className} fill="currentColor" viewBox="0 0 24 24">
       <path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z" />
       <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ScreenShareIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z" />
     </svg>
   );
 }

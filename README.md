@@ -90,6 +90,59 @@ cd apps/desktop
 cargo tauri build --features i2p
 ```
 
+## Video Calling
+
+Toxcord supports 1-on-1 video calls via ToxAV. Video is captured from your webcam, converted to YUV420, and transmitted peer-to-peer.
+
+### Linux Camera Requirements
+
+On Linux, webcam support requires the **uvcvideo** kernel module. Most distributions load this automatically when a USB webcam is plugged in.
+
+**If your camera isn't detected:**
+
+1. **Check if the webcam is connected:**
+   ```bash
+   lsusb | grep -i cam
+   ```
+
+2. **Check for video devices:**
+   ```bash
+   ls /dev/video*
+   ```
+
+3. **If webcam is connected but no /dev/video* exists:**
+
+   The app will show an "Enable Camera" button in the device settings. Click it to load the driver (requires password).
+
+   Or manually:
+   ```bash
+   sudo modprobe uvcvideo
+   ```
+
+4. **If modprobe says "Module not found":**
+
+   Your kernel modules may be out of sync. This happens after kernel updates. **Reboot your system** to use the new kernel with the correct modules.
+
+   Check current vs installed kernel:
+   ```bash
+   uname -r              # Running kernel
+   ls /lib/modules/      # Installed modules
+   ```
+
+5. **Verify UVC support is enabled in your kernel:**
+   ```bash
+   zcat /proc/config.gz | grep CONFIG_USB_VIDEO_CLASS
+   # Should show: CONFIG_USB_VIDEO_CLASS=m or CONFIG_USB_VIDEO_CLASS=y
+   ```
+
+### Permissions
+
+Ensure your user is in the `video` group:
+```bash
+sudo usermod -aG video $USER
+# Log out and back in for changes to take effect
+```
+
 ## Proxy Configuration
 
 Toxcord supports routing Tox traffic through SOCKS5 or HTTP proxies. This can be used with:

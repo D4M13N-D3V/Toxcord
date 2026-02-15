@@ -2,6 +2,7 @@ mod audio;
 mod commands;
 mod db;
 mod managers;
+mod video;
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -13,6 +14,12 @@ use managers::tox_manager::ToxManager;
 pub struct AppState {
     pub tox_manager: Mutex<Option<Arc<Mutex<ToxManager>>>>,
     pub message_store: Mutex<Option<Arc<MessageStore>>>,
+    /// Selected audio input device index (None = default)
+    pub selected_mic_index: Mutex<Option<u32>>,
+    /// Selected audio output device index (None = default)
+    pub selected_speaker_index: Mutex<Option<u32>>,
+    /// Selected video device index (None = default)
+    pub selected_camera_index: Mutex<Option<u32>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -29,6 +36,9 @@ pub fn run() {
         .manage(AppState {
             tox_manager: Mutex::new(None),
             message_store: Mutex::new(None),
+            selected_mic_index: Mutex::new(None),
+            selected_speaker_index: Mutex::new(None),
+            selected_camera_index: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::list_profiles,
@@ -79,6 +89,12 @@ pub fn run() {
             commands::calls::get_call_state,
             commands::calls::list_audio_input_devices,
             commands::calls::list_audio_output_devices,
+            commands::calls::list_video_devices,
+            commands::calls::set_audio_input_device,
+            commands::calls::set_audio_output_device,
+            commands::calls::set_video_device,
+            commands::calls::check_camera_status,
+            commands::calls::load_camera_driver,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

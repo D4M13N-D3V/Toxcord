@@ -6,6 +6,7 @@ import { useCallStore } from "../stores/callStore";
 import * as api from "../api/tox";
 import type { DirectMessage } from "../api/tox";
 import { MiniCallIndicator } from "../components/call/VoiceCallUI";
+import { CallPanel } from "../components/call/CallPanel";
 
 const EMPTY_MESSAGES: never[] = [];
 
@@ -25,12 +26,16 @@ export function DMPage() {
 
 function DMConversation({ friendNumber }: { friendNumber: number }) {
   const friends = useFriendStore((s) => s.friends);
+  const activeCall = useCallStore((s) => s.activeCall);
   const friend = useMemo(
     () => friends.find((f) => f.friend_number === friendNumber),
     [friends, friendNumber],
   );
   const friendName = friend?.name || (friend?.public_key ? friend.public_key.slice(0, 16) + "..." : "Unknown");
   const isOnline = friend ? friend.connection_status !== "none" : false;
+
+  // Check if we're in an active call with this friend
+  const isInActiveCall = activeCall?.friendNumber === friendNumber && activeCall?.status === "in_progress";
 
   return (
     <div className="flex flex-1 flex-col bg-discord-chat">
@@ -40,6 +45,9 @@ function DMConversation({ friendNumber }: { friendNumber: number }) {
         isOnline={isOnline}
         statusMessage={friend?.status_message}
       />
+      {/* Show call panel above chat when in a call */}
+      {isInActiveCall && <CallPanel />}
+      {/* Chat is always visible */}
       <MessageArea friendNumber={friendNumber} friendName={friendName} />
       <MessageInput friendNumber={friendNumber} friendName={friendName} isOnline={isOnline} />
     </div>

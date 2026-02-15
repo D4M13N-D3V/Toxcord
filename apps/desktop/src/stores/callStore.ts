@@ -35,6 +35,11 @@ interface CallStoreState {
   /** Whether speaker is deafened */
   isDeafened: boolean;
 
+  /** Selected device IDs */
+  selectedMicId: string | null;
+  selectedSpeakerId: string | null;
+  selectedCameraId: string | null;
+
   // Actions
   startCall: (friendNumber: number, friendName: string, withVideo?: boolean) => Promise<void>;
   answerCall: (withVideo?: boolean) => Promise<void>;
@@ -43,6 +48,11 @@ interface CallStoreState {
   toggleMute: () => Promise<void>;
   toggleDeafen: () => void;
   toggleVideo: () => Promise<void>;
+
+  // Device selection
+  setSelectedMic: (id: string) => Promise<void>;
+  setSelectedSpeaker: (id: string) => Promise<void>;
+  setSelectedCamera: (id: string) => Promise<void>;
 
   // Internal state updates from events
   setIncomingCall: (call: IncomingCall | null) => void;
@@ -62,6 +72,9 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
   isConnecting: false,
   isMuted: false,
   isDeafened: false,
+  selectedMicId: null,
+  selectedSpeakerId: null,
+  selectedCameraId: null,
 
   startCall: async (friendNumber, friendName, withVideo = false) => {
     set({ isConnecting: true });
@@ -154,6 +167,36 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
 
   toggleDeafen: () => {
     set((s) => ({ isDeafened: !s.isDeafened }));
+  },
+
+  setSelectedMic: async (id) => {
+    set({ selectedMicId: id });
+    console.log("[CallStore] Selected microphone:", id);
+    try {
+      await api.setAudioInputDevice(id);
+    } catch (e) {
+      console.error("Failed to set audio input device:", e);
+    }
+  },
+
+  setSelectedSpeaker: async (id) => {
+    set({ selectedSpeakerId: id });
+    console.log("[CallStore] Selected speaker:", id);
+    try {
+      await api.setAudioOutputDevice(id);
+    } catch (e) {
+      console.error("Failed to set audio output device:", e);
+    }
+  },
+
+  setSelectedCamera: async (id) => {
+    set({ selectedCameraId: id });
+    console.log("[CallStore] Selected camera:", id);
+    try {
+      await api.setVideoDevice(id);
+    } catch (e) {
+      console.error("Failed to set video device:", e);
+    }
   },
 
   toggleVideo: async () => {

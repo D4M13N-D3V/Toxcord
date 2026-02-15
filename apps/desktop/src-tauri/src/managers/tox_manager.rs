@@ -1,17 +1,19 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tracing::{debug, error, info, warn};
 
 use toxcord_tox::callbacks::ToxEventHandler;
 use toxcord_tox::tox::{decrypt_savedata, default_bootstrap_nodes, encrypt_savedata, is_data_encrypted};
 use toxcord_tox::types::*;
-use toxcord_tox::{AudioFrame, ProxyType, ToxAvEventHandler, ToxAvInstance, ToxInstance, ToxOptionsBuilder};
+use toxcord_tox::{AudioFrame, ProxyType, ToxAvEventHandler, ToxAvInstance, ToxInstance, ToxOptionsBuilder, VideoFrame};
 
-use super::av_manager::{AvManager, CallState, CallStatus, TauriAvEventHandler};
+use super::av_manager::{AvManager, CallState, CallStatus, TauriAvEventHandler, ToxAvEvent};
 use crate::audio::{AudioCapture, AudioMixer, AudioPlayback};
+use crate::video::{VideoCapture, VideoCaptureError, VideoFrameData};
+use crate::AppState;
 
 /// Proxy configuration for Tox connections
 #[derive(Clone, Debug, Default)]
@@ -954,6 +956,16 @@ fn run_tox_thread(
     let mut audio_playback: Option<AudioPlayback> = None;
     let mut audio_active = false;
 
+    // Video capture channel - capture thread sends frames here
+    let (video_tx, mut video_rx) = tokio::sync::mpsc::unbounded_channel::<VideoFrameData>();
+    // Video capture error channel - capture thread sends errors here
+    let (video_error_tx, mut video_error_rx) = tokio::sync::mpsc::unbounded_channel::<VideoCaptureError>();
+
+    // Video capture (managed on this thread, started when video calls are active)
+    let mut video_capture: Option<VideoCapture> = None;
+    let mut video_active = false;
+    let mut video_capture_failed = false; // Tracks if capture failed, to avoid retry loop
+
     // Bootstrap to DHT nodes
     for node in default_bootstrap_nodes() {
         if let Err(e) = tox.bootstrap(&node.address, node.port, &node.public_key) {
@@ -1357,7 +1369,15 @@ fn run_tox_thread(
                 }
                 ToxCommand::AvMuteAudio { friend_number, reply } => {
                     let result = if let Some(ref av) = toxav {
-                        av.mute_audio(friend_number).map_err(|e| e.to_string())
+                        match av.mute_audio(friend_number) {
+                            Ok(()) => {
+                                if let Ok(mut mgr) = av_manager.lock() {
+                                    mgr.set_audio_muted(friend_number, true);
+                                }
+                                Ok(())
+                            }
+                            Err(e) => Err(e.to_string()),
+                        }
                     } else {
                         Err("ToxAV not available".to_string())
                     };
@@ -1365,7 +1385,15 @@ fn run_tox_thread(
                 }
                 ToxCommand::AvUnmuteAudio { friend_number, reply } => {
                     let result = if let Some(ref av) = toxav {
-                        av.unmute_audio(friend_number).map_err(|e| e.to_string())
+                        match av.unmute_audio(friend_number) {
+                            Ok(()) => {
+                                if let Ok(mut mgr) = av_manager.lock() {
+                                    mgr.set_audio_muted(friend_number, false);
+                                }
+                                Ok(())
+                            }
+                            Err(e) => Err(e.to_string()),
+                        }
                     } else {
                         Err("ToxAV not available".to_string())
                     };
@@ -1373,7 +1401,17 @@ fn run_tox_thread(
                 }
                 ToxCommand::AvHideVideo { friend_number, reply } => {
                     let result = if let Some(ref av) = toxav {
-                        av.hide_video(friend_number).map_err(|e| e.to_string())
+                        match av.hide_video(friend_number) {
+                            Ok(()) => {
+                                // Update av_manager state
+                                if let Ok(mut mgr) = av_manager.lock() {
+                                    mgr.set_video_muted(friend_number, true);
+                                }
+                                info!("Video hidden for friend {}", friend_number);
+                                Ok(())
+                            }
+                            Err(e) => Err(e.to_string()),
+                        }
                     } else {
                         Err("ToxAV not available".to_string())
                     };
@@ -1381,7 +1419,17 @@ fn run_tox_thread(
                 }
                 ToxCommand::AvShowVideo { friend_number, reply } => {
                     let result = if let Some(ref av) = toxav {
-                        av.show_video(friend_number).map_err(|e| e.to_string())
+                        match av.show_video(friend_number) {
+                            Ok(()) => {
+                                // Update av_manager state
+                                if let Ok(mut mgr) = av_manager.lock() {
+                                    mgr.set_video_muted(friend_number, false);
+                                }
+                                info!("Video shown for friend {}", friend_number);
+                                Ok(())
+                            }
+                            Err(e) => Err(e.to_string()),
+                        }
                     } else {
                         Err("ToxAV not available".to_string())
                     };
@@ -1501,6 +1549,80 @@ fn run_tox_thread(
             audio_active = false;
         }
 
+        // Check if we have any active video calls
+        let has_video_call = if let Ok(mgr) = av_manager.lock() {
+            let calls = mgr.get_all_calls();
+            if !calls.is_empty() && !video_active {
+                // Log call states when checking for video (use info! to be visible)
+                for c in &calls {
+                    info!(
+                        "VIDEO CHECK - friend {}: state={:?}, has_video={}, is_video_muted={}",
+                        c.friend_number, c.state, c.has_video, c.is_video_muted
+                    );
+                }
+            }
+            calls.iter().any(|c| c.state == CallStatus::InProgress && c.has_video && !c.is_video_muted)
+        } else {
+            false
+        };
+
+        // Start video capture when a video call becomes active (and hasn't already failed)
+        if has_video_call && !video_active && !video_capture_failed {
+            // Get selected camera index from app state
+            let selected_camera_index = {
+                let state = app_handle.state::<AppState>();
+                // Use try_lock to avoid blocking the event loop
+                state.selected_camera_index.try_lock().ok().and_then(|guard| *guard)
+            };
+            info!("Starting video capture for active video call (device index: {:?})", selected_camera_index);
+            match VideoCapture::start_with_device(selected_camera_index, video_tx.clone(), video_error_tx.clone()) {
+                Ok(capture) => {
+                    video_capture = Some(capture);
+                    video_active = true;
+                    info!("Video capture started successfully");
+                }
+                Err(e) => {
+                    error!("Failed to start video capture: {e}");
+                    video_capture_failed = true;
+                    // Notify frontend about the video capture error
+                    let error_event = ToxAvEvent::VideoError {
+                        error: e.to_string(),
+                    };
+                    if let Err(emit_err) = app_handle.emit("toxav://local-video", &error_event) {
+                        error!("Failed to emit video error event: {emit_err}");
+                    }
+                }
+            }
+        }
+
+        // Check for video capture errors (from capture thread)
+        while let Ok(err) = video_error_rx.try_recv() {
+            error!("Video capture thread error: {}", err.message);
+            video_capture_failed = true;
+            // Notify frontend about the video capture error
+            let error_event = ToxAvEvent::VideoError {
+                error: err.message,
+            };
+            if let Err(emit_err) = app_handle.emit("toxav://local-video", &error_event) {
+                error!("Failed to emit video error event: {emit_err}");
+            }
+            // Stop video capture since it failed
+            video_capture = None;
+            video_active = false;
+        }
+
+        // Stop video capture when no video calls are active
+        if !has_video_call && video_active {
+            info!("Stopping video capture - no active video calls");
+            video_capture = None;
+            video_active = false;
+        }
+
+        // Reset video_capture_failed when video call ends so it can retry on next call
+        if !has_video_call && video_capture_failed {
+            video_capture_failed = false;
+        }
+
         // Send captured audio frames to all active calls
         if let Some(ref av) = toxav {
             let mut frame_count = 0;
@@ -1537,6 +1659,64 @@ fn run_tox_thread(
                             debug!("Failed to send audio frame to friend {}: {e}", friend_number);
                         }
                     }
+                }
+            }
+        }
+
+        // Send captured video frames to all active video calls
+        if let Some(ref av) = toxav {
+            let mut video_frame_count = 0;
+            while let Ok(frame) = video_rx.try_recv() {
+                video_frame_count += 1;
+                if video_frame_count <= 3 {
+                    info!("Video frame {}: {}x{}, Y={} U={} V={} bytes",
+                           video_frame_count, frame.width, frame.height,
+                           frame.y.len(), frame.u.len(), frame.v.len());
+                }
+
+                // Get list of friends we're in active video calls with
+                let active_video_friends: Vec<u32> = if let Ok(mgr) = av_manager.lock() {
+                    mgr.get_all_calls()
+                        .iter()
+                        .filter(|c| c.state == CallStatus::InProgress && c.has_video && !c.is_video_muted)
+                        .map(|c| c.friend_number)
+                        .collect()
+                } else {
+                    vec![]
+                };
+
+                // Send video to each active video call
+                for friend_number in &active_video_friends {
+                    let tox_frame = VideoFrame::new(
+                        frame.y.clone(),
+                        frame.u.clone(),
+                        frame.v.clone(),
+                        frame.width,
+                        frame.height,
+                    );
+                    if let Err(e) = tox_frame.validate() {
+                        debug!("Invalid video frame: {e}");
+                        continue;
+                    }
+                    if let Err(e) = av.video_send_frame(*friend_number, &tox_frame) {
+                        debug!("Failed to send video frame to friend {}: {e}", friend_number);
+                    }
+                }
+
+                // Emit local preview to frontend (combine YUV into single buffer)
+                let mut data = Vec::with_capacity(frame.y.len() + frame.u.len() + frame.v.len());
+                data.extend_from_slice(&frame.y);
+                data.extend_from_slice(&frame.u);
+                data.extend_from_slice(&frame.v);
+
+                let event = ToxAvEvent::VideoFrame {
+                    friend_number: 0, // 0 indicates local preview
+                    width: frame.width,
+                    height: frame.height,
+                    data,
+                };
+                if let Err(e) = app_handle.emit("toxav://local-video", &event) {
+                    debug!("Failed to emit local video frame: {e}");
                 }
             }
         }

@@ -26,6 +26,19 @@ export interface AudioDevice {
   is_default: boolean;
 }
 
+export interface VideoDevice {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
+export interface VideoFramePayload {
+  friend_number: number;
+  width: number;
+  height: number;
+  data: number[];
+}
+
 export type ToxAvEvent =
   | {
       type: "IncomingCall";
@@ -49,6 +62,14 @@ export type ToxAvEvent =
   | {
       type: "AudioLevelUpdate";
       data: { friend_number: number; level: number };
+    }
+  | {
+      type: "VideoFrame";
+      data: VideoFramePayload;
+    }
+  | {
+      type: "VideoError";
+      data: { error: string };
     };
 
 // ─── Call Management ─────────────────────────────────────────────────
@@ -101,6 +122,43 @@ export async function listAudioOutputDevices(): Promise<AudioDevice[]> {
   return invoke("list_audio_output_devices");
 }
 
+// ─── Video Devices ───────────────────────────────────────────────────
+
+export async function listVideoDevices(): Promise<VideoDevice[]> {
+  return invoke("list_video_devices");
+}
+
+// ─── Device Selection ─────────────────────────────────────────────────
+
+export async function setAudioInputDevice(deviceId: string): Promise<void> {
+  return invoke("set_audio_input_device", { deviceId });
+}
+
+export async function setAudioOutputDevice(deviceId: string): Promise<void> {
+  return invoke("set_audio_output_device", { deviceId });
+}
+
+export async function setVideoDevice(deviceId: string): Promise<void> {
+  return invoke("set_video_device", { deviceId });
+}
+
+// ─── Camera Diagnostics ───────────────────────────────────────────────
+
+export interface CameraStatus {
+  has_usb_camera: boolean;
+  has_video_device: boolean;
+  needs_driver_load: boolean;
+  usb_camera_name: string | null;
+}
+
+export async function checkCameraStatus(): Promise<CameraStatus> {
+  return invoke("check_camera_status");
+}
+
+export async function loadCameraDriver(): Promise<void> {
+  return invoke("load_camera_driver");
+}
+
 // ─── Event Listening ─────────────────────────────────────────────────
 
 export function onToxAvEvent(
@@ -108,5 +166,26 @@ export function onToxAvEvent(
 ): Promise<UnlistenFn> {
   return listen<ToxAvEvent>("toxav://event", (event) => {
     callback(event.payload);
+  });
+}
+
+export function onLocalVideoFrame(
+  callback: (frame: VideoFramePayload) => void,
+): Promise<UnlistenFn> {
+  return listen<{ type: "VideoFrame"; data: VideoFramePayload }>(
+    "toxav://local-video",
+    (event) => {
+      callback(event.payload.data);
+    },
+  );
+}
+
+export function onRemoteVideoFrame(
+  callback: (frame: VideoFramePayload) => void,
+): Promise<UnlistenFn> {
+  return listen<ToxAvEvent>("toxav://event", (event) => {
+    if (event.payload.type === "VideoFrame") {
+      callback(event.payload.data);
+    }
   });
 }
