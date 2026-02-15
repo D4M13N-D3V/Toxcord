@@ -150,14 +150,13 @@ jobs:
       - name: Build Tauri App
         shell: msys2 {0}
         env:
-          TAURI_SKIP_DEVTOOLS_CHECK: true
+          TAURI_SKIP_DEVTOOLS_CHECK: "true"
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
           export PATH="$PATH:/c/Users/runneradmin/setup-pnpm/node_modules/.bin:/c/Program Files/nodejs"
           cd apps/desktop
           cargo tauri build
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
 
       - name: Debug - List build outputs
         shell: bash
