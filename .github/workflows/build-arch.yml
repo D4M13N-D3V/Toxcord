@@ -98,7 +98,8 @@ jobs:
             file \
             jq \
             xdg-utils \
-            squashfs-tools
+            squashfs-tools \
+            patchelf
 
       - uses: actions/checkout@v4
         with:
@@ -182,6 +183,46 @@ jobs:
           mkdir -p artifacts
           mv *.AppImage "artifacts/"
 
+      - name: Create portable tarball
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+
+          if [ -f "target/release/toxcord" ]; then
+            mkdir -p "artifacts/toxcord-${VERSION}-arch-x86_64-portable"
+            cp target/release/toxcord "artifacts/toxcord-${VERSION}-arch-x86_64-portable/toxcord"
+            chmod +x "artifacts/toxcord-${VERSION}-arch-x86_64-portable/toxcord"
+
+            # Bundle required shared libraries
+            mkdir -p "artifacts/toxcord-${VERSION}-arch-x86_64-portable/lib"
+            for lib in libsodium libopus libvpx; do
+              LIB_PATH=$(ldd "artifacts/toxcord-${VERSION}-arch-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
+              if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
+                cp "$LIB_PATH" "artifacts/toxcord-${VERSION}-arch-x86_64-portable/lib/"
+              else
+                MANUAL_PATH=$(find /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
+                if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
+                  cp "$MANUAL_PATH" "artifacts/toxcord-${VERSION}-arch-x86_64-portable/lib/"
+                fi
+              fi
+            done
+
+            # Set rpath
+            patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-${VERSION}-arch-x86_64-portable/toxcord" || true
+
+            # Create launcher script
+            printf '#!/bin/bash\nSCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"\nexec "$SCRIPT_DIR/toxcord" "$@"\n' > "artifacts/toxcord-${VERSION}-arch-x86_64-portable/run.sh"
+            chmod +x "artifacts/toxcord-${VERSION}-arch-x86_64-portable/run.sh"
+
+            # Create tarball
+            cd artifacts
+            tar -czvf "toxcord-${VERSION}-arch-x86_64-portable.tar.gz" "toxcord-${VERSION}-arch-x86_64-portable"
+            rm -rf "toxcord-${VERSION}-arch-x86_64-portable"
+            cd ..
+          fi
+
+          echo "=== Artifacts ==="
+          ls -la artifacts/
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -221,7 +262,8 @@ jobs:
             file \
             jq \
             xdg-utils \
-            squashfs-tools
+            squashfs-tools \
+            patchelf
 
       - uses: actions/checkout@v4
         with:
@@ -303,6 +345,46 @@ jobs:
 
           mkdir -p artifacts
           mv *.AppImage "artifacts/"
+
+      - name: Create portable tarball
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+
+          if [ -f "target/release/toxcord" ]; then
+            mkdir -p "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable"
+            cp target/release/toxcord "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/toxcord"
+            chmod +x "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/toxcord"
+
+            # Bundle required shared libraries
+            mkdir -p "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/lib"
+            for lib in libsodium libopus libvpx; do
+              LIB_PATH=$(ldd "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
+              if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
+                cp "$LIB_PATH" "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/lib/"
+              else
+                MANUAL_PATH=$(find /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
+                if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
+                  cp "$MANUAL_PATH" "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/lib/"
+                fi
+              fi
+            done
+
+            # Set rpath
+            patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/toxcord" || true
+
+            # Create launcher script
+            printf '#!/bin/bash\nSCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"\nexec "$SCRIPT_DIR/toxcord" "$@"\n' > "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/run.sh"
+            chmod +x "artifacts/toxcord-i2p-${VERSION}-arch-x86_64-portable/run.sh"
+
+            # Create tarball
+            cd artifacts
+            tar -czvf "toxcord-i2p-${VERSION}-arch-x86_64-portable.tar.gz" "toxcord-i2p-${VERSION}-arch-x86_64-portable"
+            rm -rf "toxcord-i2p-${VERSION}-arch-x86_64-portable"
+            cd ..
+          fi
+
+          echo "=== Artifacts ==="
+          ls -la artifacts/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

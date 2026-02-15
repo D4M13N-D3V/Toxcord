@@ -78,11 +78,12 @@ jobs:
           echo "Calculated version: ${VERSION}"
 
   build:
-    name: Build Fedora RPM
+    name: Build Fedora AppImage
     runs-on: ubuntu-latest
     needs: version
     container:
       image: fedora:latest
+      options: --privileged --device /dev/fuse
     steps:
       - name: Install git
         run: dnf install -y git
@@ -175,33 +176,56 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           APPIMAGE_EXTRACT_AND_RUN: "1"
 
-      - name: Debug - List build outputs
+      - name: Create AppImage manually
         run: |
-          echo "=== Target directory ==="
-          find target/release -name "toxcord*" -o -name "*.rpm" 2>/dev/null | head -20 || echo "No files found"
-          echo "=== Bundle directory ==="
-          find target/release/bundle -type f 2>/dev/null | head -20 || echo "No bundle directory"
-
-      - name: Prepare artifacts
-        run: |
-          mkdir -p artifacts
           VERSION="${{ needs.version.outputs.version }}"
 
-          # Find and copy AppImage
-          APPIMAGE=$(find target/release/bundle -name "*.AppImage" 2>/dev/null | head -1)
-          if [ -n "$APPIMAGE" ] && [ -f "$APPIMAGE" ]; then
-            cp "$APPIMAGE" "artifacts/toxcord-${VERSION}-fedora-x86_64.AppImage"
-            echo "Copied AppImage"
-          fi
+          # Download appimagetool
+          curl -L -o /tmp/appimagetool.AppImage https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool.AppImage
+          cd /tmp && ./appimagetool.AppImage --appimage-extract && mv squashfs-root appimagetool && cd -
 
-          # Find and copy RPM package
-          RPM=$(find target/release/bundle -name "*.rpm" 2>/dev/null | head -1)
-          if [ -n "$RPM" ] && [ -f "$RPM" ]; then
-            cp "$RPM" "artifacts/toxcord-${VERSION}-fedora-x86_64.rpm"
-            echo "Copied RPM"
-          fi
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
 
-          # Copy raw binary with bundled libraries
+          cp target/release/toxcord AppDir/usr/bin/
+          cp apps/desktop/src-tauri/icons/256x256.png AppDir/usr/share/icons/hicolor/256x256/apps/toxcord.png
+          cp apps/desktop/src-tauri/icons/256x256.png AppDir/toxcord.png
+
+          cat > AppDir/usr/share/applications/toxcord.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Toxcord
+          Exec=toxcord
+          Icon=toxcord
+          Type=Application
+          Categories=Network;InstantMessaging;
+          EOF
+
+          cp AppDir/usr/share/applications/toxcord.desktop AppDir/toxcord.desktop
+
+          # Create AppRun script
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          exec "${HERE}/usr/bin/toxcord" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # Create AppImage using appimagetool directly
+          export ARCH=x86_64
+          /tmp/appimagetool/AppRun AppDir "toxcord-${VERSION}-fedora-x86_64.AppImage"
+
+          mkdir -p artifacts
+          mv *.AppImage "artifacts/"
+
+      - name: Create portable tarball
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+
           if [ -f "target/release/toxcord" ]; then
             mkdir -p "artifacts/toxcord-${VERSION}-fedora-x86_64-portable"
             cp target/release/toxcord "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord"
@@ -209,27 +233,17 @@ jobs:
 
             # Bundle required shared libraries
             mkdir -p "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib"
-            echo "=== ldd output ==="
-            ldd "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord" || true
-            echo "=== Bundling libs ==="
             for lib in libsodium libopus libvpx; do
               LIB_PATH=$(ldd "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord" | grep -E "${lib}" | awk '{print $3}' | head -1)
-              echo "Looking for $lib: found '$LIB_PATH'"
               if [ -n "$LIB_PATH" ] && [ -f "$LIB_PATH" ]; then
                 cp "$LIB_PATH" "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib/"
-                echo "Bundled $lib from $LIB_PATH"
               else
                 MANUAL_PATH=$(find /usr/lib64 /usr/lib -name "${lib}*.so*" 2>/dev/null | head -1)
                 if [ -n "$MANUAL_PATH" ] && [ -f "$MANUAL_PATH" ]; then
                   cp "$MANUAL_PATH" "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib/"
-                  echo "Bundled $lib from $MANUAL_PATH (manual)"
-                else
-                  echo "WARNING: Could not find $lib"
                 fi
               fi
             done
-            echo "=== Bundled libs ==="
-            ls -la "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/lib/" || true
 
             # Set rpath
             patchelf --set-rpath '$ORIGIN/lib' "artifacts/toxcord-${VERSION}-fedora-x86_64-portable/toxcord" || true
@@ -243,11 +257,10 @@ jobs:
             tar -czvf "toxcord-${VERSION}-fedora-x86_64-portable.tar.gz" "toxcord-${VERSION}-fedora-x86_64-portable"
             rm -rf "toxcord-${VERSION}-fedora-x86_64-portable"
             cd ..
-            echo "Created portable tarball"
           fi
 
           echo "=== Artifacts ==="
-          ls -la artifacts/ || echo "No artifacts directory"
+          ls -la artifacts/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -255,7 +268,7 @@ jobs:
           name: toxcord-fedora-${{ needs.version.outputs.version }}
           path: artifacts/*
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
   release:
     name: Create Release
@@ -276,21 +289,28 @@ jobs:
       - name: List release files
         run: ls -la release-files/
 
+      - name: Generate changelog
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LATEST_TAG" ]; then
+            CHANGELOG=$(git log ${LATEST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          echo "## What's Changed (Fedora)" > release_notes.md
+          echo "" >> release_notes.md
+          echo "$CHANGELOG" >> release_notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ needs.version.outputs.version_tag }}
-          name: Release ${{ needs.version.outputs.version }}
-          body: |
-            ## Toxcord ${{ needs.version.outputs.version }}
-
-            ### Fedora Downloads
-            - **AppImage**: `toxcord-${{ needs.version.outputs.version }}-fedora-x86_64.AppImage`
-            - **RPM**: `toxcord-${{ needs.version.outputs.version }}-fedora-x86_64.rpm`
-            - **Portable**: `toxcord-${{ needs.version.outputs.version }}-fedora-x86_64-portable.tar.gz`
-          files: release-files/*
+          tag_name: ${{ needs.version.outputs.version_tag }}-fedora
+          name: Toxcord ${{ needs.version.outputs.version }} (Fedora)
+          body_path: release_notes.md
           draft: false
           prerelease: false
-          fail_on_unmatched_files: false
+          files: |
+            release-files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
