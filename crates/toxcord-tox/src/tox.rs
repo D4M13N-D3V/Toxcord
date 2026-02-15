@@ -635,14 +635,14 @@ pub fn default_bootstrap_nodes() -> Vec<BootstrapNode> {
         BootstrapNode {
             address: "144.217.167.73".into(),
             port: 33445,
-            public_key: "7E5668E0EE09E19F320AD47902419331FFEE147BB3606769CE1C39F3B267235F".into(),
+            public_key: "7E5668E0EE09E19F320AD47902419331FFEE147BB3606769CFBE921A2A2FD34C".into(),
             tcp_ports: vec![33445, 3389],
         },
-        // US - multiple TCP ports including common firewall-friendly ones
+        // US - multiple TCP ports including common firewall-friendly ones (port 53/443)
         BootstrapNode {
             address: "205.185.115.131".into(),
             port: 53,
-            public_key: "3091C6BEB2A993F1AFA2A043EFFE3432A651D790B67E2DD37BFE6E7C5BCD3F6E".into(),
+            public_key: "3091C6BEB2A993F1C6300C16549FABA67098FF3D62C6D253828B531470B53D68".into(),
             tcp_ports: vec![53, 443, 33445, 3389],
         },
         // Germany - mf-net.eu node
@@ -663,43 +663,43 @@ pub fn default_bootstrap_nodes() -> Vec<BootstrapNode> {
         BootstrapNode {
             address: "3.0.24.15".into(),
             port: 33445,
-            public_key: "E20ABCF38CDBFFD7D04B29C956B33682B5F5E7E628D6ACBE7E7C3C8D8B3D6F7D".into(),
+            public_key: "E20ABCF38CDBFFD7D04B29C956B33F7B27A3BB7AF0618101617B036E4AEA402D".into(),
             tcp_ports: vec![33445],
         },
         // US - additional node
         BootstrapNode {
             address: "104.225.141.59".into(),
             port: 43334,
-            public_key: "933BA20B2E258B4C0D475B6DECE90C7E827FE83F0DA0C2D4AE9D6EDE3D8FF6EA".into(),
+            public_key: "933BA20B2E258B4C0D475B6DECE90C7E827FE83EFA9655414E7841251B19A72C".into(),
             tcp_ports: vec![33445, 3389],
         },
         // Singapore - Linode
         BootstrapNode {
             address: "139.162.110.188".into(),
             port: 33445,
-            public_key: "F76A11284547163B190B5A2E4F66BACA9AA4381540E1609E99FF5B14C40C14D0".into(),
+            public_key: "F76A11284547163889DDC89A7738CF271797BF5E5E220643E97AD3C7E7903D55".into(),
             tcp_ports: vec![33445, 3389, 443],
         },
         // Germany - mf-net.eu secondary
         BootstrapNode {
             address: "tox2.mf-net.eu".into(),
             port: 33445,
-            public_key: "70EA214FDE161E7432530605213F18F7427DC773E276B3E317A07A1F9B4A6F1E".into(),
+            public_key: "70EA214FDE161E7432530605213F18F7427DC773E276B3E317A07531F548545F".into(),
             tcp_ports: vec![33445, 3389],
         },
-        // Canada - abilinski (original, but with TCP)
+        // Canada - abilinski (original)
         BootstrapNode {
             address: "tox.abilinski.com".into(),
             port: 33445,
             public_key: "10C00EB250C3233E343E2AEBA07115A5C28920E9C8D29492F6D00B29049EDC7E".into(),
-            tcp_ports: vec![33445],
+            tcp_ports: vec![], // No TCP relay support
         },
         // Netherlands
         BootstrapNode {
             address: "tox.kurnevsky.net".into(),
             port: 33445,
-            public_key: "82EF82BA33445A1F91A7DB27189ECFC0C013A96D5E4A5B3C8A3A39C4E4E9F94E".into(),
-            tcp_ports: vec![33445, 443],
+            public_key: "82EF82BA33445A1F91A7DB27189ECFC0C013E06E3DA71F588ED692BED625EC23".into(),
+            tcp_ports: vec![], // No TCP relay support
         },
     ]
 }
