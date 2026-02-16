@@ -137,7 +137,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/cross-libs
-          key: cross-libs-win64-v2
+          key: cross-libs-win64-v3
 
       - name: Build cross-compiled dependencies
         if: steps.cache-libs.outputs.cache-hit != 'true'
