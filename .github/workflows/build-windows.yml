@@ -215,10 +215,12 @@ jobs:
 
       - name: Verify cross-compiled libraries
         run: |
-          echo "=== Checking cross-compiled libraries ==="
+          echo "=== Checking cross-compiled libraries (lib) ==="
           ls -la ~/cross-libs/lib/ | head -20
+          echo "=== Checking cross-compiled libraries (lib64) ==="
+          ls -la ~/cross-libs/lib64/ | head -20 || echo "No lib64"
           echo "=== OpenSSL pkgconfig ==="
-          cat ~/cross-libs/lib/pkgconfig/libcrypto.pc 2>/dev/null || echo "No libcrypto.pc"
+          cat ~/cross-libs/lib64/pkgconfig/libcrypto.pc 2>/dev/null || echo "No libcrypto.pc"
 
       - name: Build Tauri App
         env:
@@ -232,29 +234,29 @@ jobs:
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: "x86_64-w64-mingw32-gcc"
           # CMake settings for native dependencies
           CMAKE_TOOLCHAIN_FILE: "${{ github.workspace }}/.github/mingw64-toolchain.cmake"
-          # Cross-compilation OpenSSL settings
+          # Cross-compilation OpenSSL settings (installs to lib64 on 64-bit)
           X86_64_PC_WINDOWS_GNU_OPENSSL_DIR: "/home/runner/cross-libs"
-          X86_64_PC_WINDOWS_GNU_OPENSSL_LIB_DIR: "/home/runner/cross-libs/lib"
+          X86_64_PC_WINDOWS_GNU_OPENSSL_LIB_DIR: "/home/runner/cross-libs/lib64"
           X86_64_PC_WINDOWS_GNU_OPENSSL_INCLUDE_DIR: "/home/runner/cross-libs/include"
           X86_64_PC_WINDOWS_GNU_OPENSSL_STATIC: "1"
         run: |
           # Set up cross-compilation environment paths
           export CROSS_ROOT="$HOME/cross-libs"
           export PKG_CONFIG_ALLOW_CROSS=1
-          export PKG_CONFIG_PATH="$CROSS_ROOT/lib/pkgconfig"
+          export PKG_CONFIG_PATH="$CROSS_ROOT/lib/pkgconfig:$CROSS_ROOT/lib64/pkgconfig"
           export PKG_CONFIG_SYSROOT_DIR="$CROSS_ROOT"
           # Sodium paths
           export SODIUM_LIB_DIR="$CROSS_ROOT/lib"
           export SODIUM_INCLUDE_DIR="$CROSS_ROOT/include"
           export SODIUM_STATIC=1
-          # OpenSSL for SQLCipher
+          # OpenSSL for SQLCipher (installs to lib64 on 64-bit)
           export OPENSSL_DIR="$CROSS_ROOT"
-          export OPENSSL_LIB_DIR="$CROSS_ROOT/lib"
+          export OPENSSL_LIB_DIR="$CROSS_ROOT/lib64"
           export OPENSSL_INCLUDE_DIR="$CROSS_ROOT/include"
           export OPENSSL_STATIC=1
-          # Add library path for linker
-          export LIBRARY_PATH="$CROSS_ROOT/lib:$LIBRARY_PATH"
-          export RUSTFLAGS="-L $CROSS_ROOT/lib $RUSTFLAGS"
+          # Add library paths for linker (both lib and lib64)
+          export LIBRARY_PATH="$CROSS_ROOT/lib:$CROSS_ROOT/lib64:$LIBRARY_PATH"
+          export RUSTFLAGS="-L $CROSS_ROOT/lib -L $CROSS_ROOT/lib64 $RUSTFLAGS"
 
           cd apps/desktop
           cargo tauri build --target x86_64-pc-windows-gnu
