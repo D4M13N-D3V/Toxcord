@@ -213,6 +213,13 @@ jobs:
           convert 256x256.png -define icon:auto-resize=256,128,64,48,32,16 icon.ico
           ls -la
 
+      - name: Verify cross-compiled libraries
+        run: |
+          echo "=== Checking cross-compiled libraries ==="
+          ls -la ~/cross-libs/lib/ | head -20
+          echo "=== OpenSSL pkgconfig ==="
+          cat ~/cross-libs/lib/pkgconfig/libcrypto.pc 2>/dev/null || echo "No libcrypto.pc"
+
       - name: Build Tauri App
         env:
           TAURI_SKIP_DEVTOOLS_CHECK: "true"
@@ -225,6 +232,11 @@ jobs:
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: "x86_64-w64-mingw32-gcc"
           # CMake settings for native dependencies
           CMAKE_TOOLCHAIN_FILE: "${{ github.workspace }}/.github/mingw64-toolchain.cmake"
+          # Cross-compilation OpenSSL settings
+          X86_64_PC_WINDOWS_GNU_OPENSSL_DIR: "/home/runner/cross-libs"
+          X86_64_PC_WINDOWS_GNU_OPENSSL_LIB_DIR: "/home/runner/cross-libs/lib"
+          X86_64_PC_WINDOWS_GNU_OPENSSL_INCLUDE_DIR: "/home/runner/cross-libs/include"
+          X86_64_PC_WINDOWS_GNU_OPENSSL_STATIC: "1"
         run: |
           # Set up cross-compilation environment paths
           export CROSS_ROOT="$HOME/cross-libs"
@@ -240,6 +252,9 @@ jobs:
           export OPENSSL_LIB_DIR="$CROSS_ROOT/lib"
           export OPENSSL_INCLUDE_DIR="$CROSS_ROOT/include"
           export OPENSSL_STATIC=1
+          # Add library path for linker
+          export LIBRARY_PATH="$CROSS_ROOT/lib:$LIBRARY_PATH"
+          export RUSTFLAGS="-L $CROSS_ROOT/lib $RUSTFLAGS"
 
           cd apps/desktop
           cargo tauri build --target x86_64-pc-windows-gnu
