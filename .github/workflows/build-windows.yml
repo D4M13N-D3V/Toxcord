@@ -104,7 +104,8 @@ jobs:
             wine64 \
             libclang-dev \
             clang \
-            imagemagick
+            imagemagick \
+            nsis
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
