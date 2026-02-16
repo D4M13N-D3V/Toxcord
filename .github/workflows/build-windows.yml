@@ -103,7 +103,8 @@ jobs:
             yasm \
             wine64 \
             libclang-dev \
-            clang
+            clang \
+            imagemagick
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -204,6 +205,13 @@ jobs:
         run: |
           cd apps/desktop
           pnpm build
+
+      - name: Generate Windows icon
+        run: |
+          cd apps/desktop/src-tauri/icons
+          # Create .ico with multiple sizes from the largest PNG
+          convert 256x256.png -define icon:auto-resize=256,128,64,48,32,16 icon.ico
+          ls -la
 
       - name: Build Tauri App
         env:
