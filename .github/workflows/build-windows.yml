@@ -181,8 +181,8 @@ jobs:
           which rustc
           rustc --version --verbose
           cd apps/desktop
-          # Build using MSYS2's native MinGW Rust toolchain
-          cargo tauri build
+          # Build using MSYS2's native MinGW Rust toolchain with explicit target
+          cargo tauri build --target x86_64-pc-windows-gnu
 
       - name: Debug - List build outputs
         shell: bash
@@ -212,8 +212,11 @@ jobs:
             echo "Copied NSIS installer"
           fi
 
-          # Copy raw binary
-          if [ -f "target/release/toxcord.exe" ]; then
+          # Copy raw binary (check target-specific directory first)
+          if [ -f "target/x86_64-pc-windows-gnu/release/toxcord.exe" ]; then
+            cp "target/x86_64-pc-windows-gnu/release/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
+            echo "Copied binary from GNU target"
+          elif [ -f "target/release/toxcord.exe" ]; then
             cp "target/release/toxcord.exe" "artifacts/toxcord-${VERSION}-windows-x86_64.exe"
             echo "Copied binary"
           fi
